@@ -189,4 +189,50 @@ public class AuthController {
         
         return ResponseEntity.ok(response);
     }
-} 
+
+    @GetMapping("/me")
+    @Operation(
+        summary = "Информация о текущем пользователе",
+        description = """
+            Возвращает информацию о текущем авторизованном пользователе.
+            
+            **Требует**: Bearer токен в заголовке Authorization
+            """
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Информация получена",
+            content = @Content(
+                mediaType = "application/json",
+                examples = @ExampleObject(
+                    name = "Информация о пользователе",
+                    value = """
+                        {
+                          "username": "user",
+                          "userId": 1,
+                          "isSetup": true
+                        }
+                        """
+                )
+            )
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Не авторизован"
+        )
+    })
+    public ResponseEntity<Map<String, Object>> getCurrentUser() {
+        try {
+            var user = userService.getCurrentUser();
+            Map<String, Object> response = Map.of(
+                "username", user.getUsername(),
+                "userId", user.getId(),
+                "isSetup", true
+            );
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(401).build();
+        }
+    }
+}

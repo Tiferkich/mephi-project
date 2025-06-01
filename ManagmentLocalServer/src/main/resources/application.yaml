@@ -21,6 +21,14 @@ spring:
   flyway:
     enabled: false
 
+# CORS configuration
+mvc:
+  cors:
+    allowed-origins: "*"
+    allowed-methods: "*"
+    allowed-headers: "*"
+    allow-credentials: false
+
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET:local-server-secret-key-which-should-be-at-least-256-bits-long-for-security-purposes}

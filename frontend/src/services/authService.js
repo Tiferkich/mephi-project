@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { createMasterPasswordHash } from '../utils/crypto';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = 'http://localhost:3001';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -12,8 +12,9 @@ const api = axios.create({
   },
 });
 
-// Add auth token to requests
+// Отладка запросов
 api.interceptors.request.use((config) => {
+  console.log('🔄 API Request:', config.method?.toUpperCase(), config.url, config);
   const token = localStorage.getItem('authToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -23,8 +24,12 @@ api.interceptors.request.use((config) => {
 
 // Handle auth errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('✅ API Response:', response.status, response.config.url, response.data);
+    return response;
+  },
   (error) => {
+    console.error('❌ API Error:', error.response?.status, error.config?.url, error.message);
     if (error.response?.status === 401) {
       localStorage.removeItem('authToken');
       // Could trigger logout here
@@ -37,7 +42,7 @@ export const authService = {
   // Check if setup is completed
   async checkSetupStatus() {
     try {
-      const response = await api.get('/auth/setup/status');
+      const response = await api.get('/auth/status');
       return response.data;
     } catch (error) {
       console.error('Failed to check setup status:', error);
@@ -52,13 +57,13 @@ export const authService = {
     }
   },
 
-  // Register new user (first time setup) - ТОЛЬКО ЛОКАЛЬНО
-  async register(userData) {
+  // Setup new user (first time setup) - ТОЛЬКО ЛОКАЛЬНО
+  async setup(userData) {
     try {
-      const response = await api.post('/auth/register', {
+      const response = await api.post('/auth/setup', {
         username: userData.username,
         salt: userData.salt,
-        passwordHash: userData.masterPasswordHash // Отправляем SHA-256 хеш
+        passwordHash: userData.masterPasswordHash // Отправляем уже захешированный пароль
       });
       
       if (response.data.token) {
@@ -67,13 +72,13 @@ export const authService = {
       
       return response.data;
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('Setup error:', error);
       
       if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
         throw new Error('Cannot connect to local server. Please make sure the local server is running.');
       }
       
-      throw new Error(error.response?.data?.message || 'Registration failed');
+      throw new Error(error.response?.data?.message || 'Setup failed');
     }
   },
 

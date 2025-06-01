@@ -59,10 +59,10 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
 
       console.log('Registration data:', registrationData); // Для отладки
 
-      // Регистрируем пользователя локально
-      const response = await authService.register(registrationData);
+      // Выполняем первичную настройку локально
+      const response = await authService.setup(registrationData);
       
-      // Успешная регистрация
+      // Успешная настройка
       onSetupComplete({
         username: formData.username,
         userId: response.userId,

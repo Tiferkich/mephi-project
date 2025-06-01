@@ -17,9 +17,3 @@ public class ManagmentLocalServerApplication {
 	}
 
 }
-
-	public static void main(String[] args) {
-		SpringApplication.run(ManagmentLocalServerApplication.class, args);
-	}
-
-}

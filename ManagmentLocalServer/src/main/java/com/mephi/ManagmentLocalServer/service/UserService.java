@@ -39,7 +39,7 @@ public class UserService {
         user.setId(UUID.randomUUID().toString()); // Генерируем UUID как ID
         user.setUsername(request.getUsername());
         user.setSalt(request.getSalt());
-        user.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
+        user.setPasswordHash(request.getPasswordHash()); // Сохраняем хеш напрямую, он уже обработан на клиенте
         user.setSetup(true);
 
         user = userRepository.save(user);
@@ -121,9 +121,6 @@ public class UserService {
             return user.getRemoteId() != null && user.getRemoteToken() != null;
         } catch (Exception e) {
             return false;
-        }
-    }
-} 
         }
     }
 } 

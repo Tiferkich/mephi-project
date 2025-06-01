@@ -6,27 +6,28 @@ import com.mephi.ManagmentLocalServer.dto.remote.RemoteRegisterRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
 
+/**
+ * Сервис для работы с удаленным сервером аутентификации
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class RemoteAuthService {
-
+    
     private final WebClient.Builder webClientBuilder;
     private final UserService userService;
 
     @Value("${remote.server.url}")
     private String remoteServerUrl;
-
+    
     @Value("${remote.server.enabled}")
     private boolean remoteEnabled;
-
+    
     @Value("${remote.server.timeout}")
     private int timeout;
 
@@ -35,7 +36,7 @@ public class RemoteAuthService {
      * 
      * @param username имя пользователя
      * @param salt соль для хеширования
-     * @param passwordHash уже захешированный пароль (Argon2) из локальной БД
+     * @param passwordHash уже захешированный пароль (Argon2)
      * @return ответ с JWT токеном от удаленного сервера
      */
     public RemoteJwtResponse registerOnRemote(String username, String salt, String passwordHash) {
@@ -183,35 +184,6 @@ public class RemoteAuthService {
             return false;
         }
     }
-
-    /**
-     * Синхронизирует данные пользователя с удаленным сервером
-     */
-    public void syncWithRemote() {
-        // Логика синхронизации может быть добавлена здесь
-        log.info("Starting synchronization with remote server");
-    }
-
-    /**
-     * Получает статус подключения к удаленному серверу
-     */
-    public String getConnectionStatus() {
-        return checkRemoteConnection() ? "CONNECTED" : "DISCONNECTED";
-    }
-
-    /**
-     * Отключает удаленный аккаунт локально
-     */
-    public void disconnectRemoteAccount() {
-        try {
-            userService.updateRemoteData(null, null);
-            log.info("Remote account disconnected locally");
-        } catch (Exception e) {
-            log.error("Failed to disconnect remote account", e);
-            throw new RuntimeException("Failed to disconnect remote account: " + e.getMessage());
-        }
-    }
-} 
 
     /**
      * Синхронизирует данные пользователя с удаленным сервером

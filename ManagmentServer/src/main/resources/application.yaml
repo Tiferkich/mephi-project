@@ -49,6 +49,3 @@ springdoc:
     - group: 'management-server-api'
       display-name: 'Management Server API'
       paths-to-match: '/api/**'
-    - group: 'management-server-api'
-      display-name: 'Management Server API'
-      paths-to-match: '/api/**'
