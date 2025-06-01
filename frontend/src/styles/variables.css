@@ -1,0 +1,79 @@
+:root {
+    /* Your Color Palette */
+    --background-dark: rgb(8,7,8);
+    --base-dark: rgb(30,30,30);
+    --base-light: rgb(53,52,53);
+    --text-colour: rgb(255, 255, 255);
+    --text-second: rgba(255, 255, 255, 0.288);
+    --web-green: rgb(34, 197, 94);
+    --web-orange: rgb(229,158,8);
+    --web-red: rgb(239, 68, 68);
+    --web-green-hover: rgb(28, 165, 77);
+    
+    /* Extended color variations */
+    --web-orange-hover: rgb(202, 138, 4);
+    --web-red-hover: rgb(220, 38, 38);
+    
+    /* Semantic colors */
+    --color-success: var(--web-green);
+    --color-success-hover: var(--web-green-hover);
+    --color-warning: var(--web-orange);
+    --color-warning-hover: var(--web-orange-hover);
+    --color-danger: var(--web-red);
+    --color-danger-hover: var(--web-red-hover);
+    
+    /* Background variants */
+    --bg-primary: var(--background-dark);
+    --bg-secondary: var(--base-dark);
+    --bg-tertiary: var(--base-light);
+    
+    /* Text variants */
+    --text-primary: var(--text-colour);
+    --text-secondary: var(--text-second);
+    
+    /* Border and shadows */
+    --border-color: rgba(255, 255, 255, 0.1);
+    --border-color-hover: rgba(255, 255, 255, 0.2);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+    
+    /* Border radius */
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --border-radius-xl: 16px;
+    
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+    --spacing-2xl: 48px;
+    
+    /* Typography */
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    --font-size-xs: 12px;
+    --font-size-sm: 14px;
+    --font-size-md: 16px;
+    --font-size-lg: 18px;
+    --font-size-xl: 20px;
+    --font-size-2xl: 24px;
+    --font-size-3xl: 30px;
+    
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    
+    /* Transitions */
+    --transition-fast: 150ms ease-in-out;
+    --transition-normal: 300ms ease-in-out;
+    --transition-slow: 500ms ease-in-out;
+    
+    /* Z-index */
+    --z-dropdown: 1000;
+    --z-modal: 1050;
+    --z-tooltip: 1100;
+}

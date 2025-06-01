@@ -1,0 +1,42 @@
+# Исключаем ненужные файлы из Docker контекста
+.git
+.gitignore
+.gitattributes
+README.md
+HELP.md
+TEST_SUMMARY.md
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test reports
+target/surefire-reports/
+target/failsafe-reports/
+target/site/
+
+# Temporary files
+*.tmp
+*.temp
+
+# CI/CD
+.gitlab-ci.yml
+
+# Docker
+Dockerfile
+.dockerignore
+compose.yaml 

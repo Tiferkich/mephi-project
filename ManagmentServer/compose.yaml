@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: vault_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: vaultdb
+      POSTGRES_USER: vaultuser
+      POSTGRES_PASSWORD: vaultpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  spring:
+    build: .
+    container_name: vault_spring
+    depends_on:
+      - postgres
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/vaultdb
+      SPRING_DATASOURCE_USERNAME: vaultuser
+      SPRING_DATASOURCE_PASSWORD: vaultpass
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

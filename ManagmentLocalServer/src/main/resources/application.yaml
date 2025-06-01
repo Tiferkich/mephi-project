@@ -1,0 +1,69 @@
+server:
+  port: 3001
+
+spring:
+  datasource:
+    url: jdbc:sqlite:./data/local_database.db
+    driver-class-name: org.sqlite.JDBC
+    
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+        hbm2ddl:
+          auto: create-drop
+        globally_quoted_identifiers: true
+    show-sql: true
+
+  flyway:
+    enabled: false
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:local-server-secret-key-which-should-be-at-least-256-bits-long-for-security-purposes}
+  expiration: ${JWT_EXPIRATION:3600000}
+
+# Remote server configuration
+remote:
+  server:
+    url: ${REMOTE_SERVER_URL:http://localhost:8080}
+    enabled: ${REMOTE_SYNC_ENABLED:true}
+    timeout: ${REMOTE_TIMEOUT:30000}
+
+# Swagger Configuration
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+# Actuator for health checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+---
+# Docker profile configuration
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:sqlite:/app/data/local_database.db 
+
+---
+# Docker profile configuration
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:sqlite:/app/data/local_database.db 

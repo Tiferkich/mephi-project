@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  managment-local-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: managment-local-server
+    ports:
+      - "3001:3001"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JWT_SECRET=local-server-secret-key-which-should-be-at-least-256-bits-long-for-security-purposes
+      - REMOTE_SERVER_URL=http://host.docker.internal:8080
+    volumes:
+      - local_server_data:/app/data
+    networks:
+      - local-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  local_server_data:
+    driver: local
+
+networks:
+  local-network:
+    driver: bridge
+
+services:
+  managment-local-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: managment-local-server
+    ports:
+      - "3001:3001"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JWT_SECRET=local-server-secret-key-which-should-be-at-least-256-bits-long-for-security-purposes
+      - REMOTE_SERVER_URL=http://host.docker.internal:8080
+    volumes:
+      - local_server_data:/app/data
+    networks:
+      - local-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  local_server_data:
+    driver: local
+
+networks:
+  local-network:
+    driver: bridge
