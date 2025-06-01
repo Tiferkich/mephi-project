@@ -1,0 +1,6 @@
+./frontend/node_modules/*
+./ManagmentLocalServer/.mvn/*
+./ManagmentLocalServer/target/*
+./ManagmentServer/.mvn/*
+./ManagmentServer/target/*
+
