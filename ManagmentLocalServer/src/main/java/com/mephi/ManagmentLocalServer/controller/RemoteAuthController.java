@@ -90,6 +90,9 @@ public class RemoteAuthController {
                 user.getPasswordHash()  // Argon2 хеш из локальной БД
             );
 
+            // Сохраняем удаленные данные локально для синхронизации
+            userService.updateRemoteData(response.getUserId(), response.getToken());
+
             log.info("User {} successfully registered on remote server", user.getUsername());
             return ResponseEntity.ok(response);
 
@@ -140,6 +143,9 @@ public class RemoteAuthController {
                 user.getPasswordHash()  // Argon2 хеш из локальной БД
             );
 
+            // Обновляем токен локально
+            userService.updateRemoteData(response.getUserId(), response.getToken());
+
             log.info("User {} successfully logged in on remote server", user.getUsername());
             return ResponseEntity.ok(response);
 
@@ -187,7 +193,8 @@ public class RemoteAuthController {
     })
     public ResponseEntity<Map<String, Object>> disconnectRemote() {
         try {
-            remoteAuthService.disconnectRemoteAccount();
+            // Очищаем удаленные данные локально
+            userService.clearRemoteData();
             
             return ResponseEntity.ok(Map.of(
                 "success", true,

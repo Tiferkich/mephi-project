@@ -14,6 +14,10 @@
     --web-orange-hover: rgb(202, 138, 4);
     --web-red-hover: rgb(220, 38, 38);
     
+    /* Info colors (blue) */
+    --web-blue: rgb(45, 100, 190);
+    --web-blue-hover: rgb(30, 80, 160);
+    
     /* Semantic colors */
     --color-success: var(--web-green);
     --color-success-hover: var(--web-green-hover);
@@ -21,6 +25,8 @@
     --color-warning-hover: var(--web-orange-hover);
     --color-danger: var(--web-red);
     --color-danger-hover: var(--web-red-hover);
+    --color-info: var(--web-blue);
+    --color-info-hover: var(--web-blue-hover);
     
     /* Background variants */
     --bg-primary: var(--background-dark);

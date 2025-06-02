@@ -21,10 +21,32 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+# ✅ Email Configuration для Gmail
+mail:
+  host: smtp.gmail.com
+  port: 587
+  username: jackdaniels.trener@gmail.com               # Можно оставить пустым для тестирования
+  password: oyyxfhxgtfzclolt               # Можно оставить пустым для тестирования
+  properties:
+    mail:
+      smtp:
+        auth: true
+        starttls:
+          enable: true
+        connectiontimeout: 5000
+        timeout: 3000
+        writetimeout: 5000
+
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET:your-very-long-secret-key-which-should-be-at-least-256-bits-long-for-security}
   expiration: ${JWT_EXPIRATION:3600000} # 1 hour in milliseconds
+
+# ✅ НОВОЕ: Application Configuration
+app:
+  name: Password Manager
+  mail:
+    from: jackdaniels.trener@gmail.com     # ← Замените на свой email
 
 # Swagger Configuration
 springdoc:
@@ -49,3 +71,13 @@ springdoc:
     - group: 'management-server-api'
       display-name: 'Management Server API'
       paths-to-match: '/api/**'
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

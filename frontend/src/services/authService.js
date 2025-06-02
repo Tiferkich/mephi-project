@@ -123,6 +123,137 @@ export const authService = {
   // Logout
   logout() {
     localStorage.removeItem('authToken');
+  },
+
+  // Replace local account with recovered account
+  async replaceAccount(recoveredData) {
+    try {
+      const response = await api.post('/auth/replace-account', {
+        username: recoveredData.username,
+        email: recoveredData.email,
+        masterPasswordHash: recoveredData.masterPasswordHash,
+        salt: recoveredData.salt,
+        remoteToken: recoveredData.remoteToken,
+        remoteId: recoveredData.remoteId,
+        passwords: recoveredData.passwords || [],
+        notes: recoveredData.notes || []
+      });
+      
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Account replacement error:', error);
+      
+      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to local server. Please make sure the local server is running.');
+      }
+      
+      throw new Error(error.response?.data?.error || 'Account replacement failed');
+    }
+  },
+
+  // Connect remote account to local account (without replacement)
+  async connectRemoteAccount(remoteData) {
+    try {
+      const response = await api.post('/auth/connect-remote', {
+        remoteToken: remoteData.remoteToken,
+        remoteId: remoteData.remoteId,
+        userData: remoteData.userData || {},
+        passwords: remoteData.passwords || [],
+        notes: remoteData.notes || []
+      });
+      
+      // Токен не меняется - остается локальный
+      return response.data;
+    } catch (error) {
+      console.error('Remote account connection error:', error);
+      
+      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to local server. Please make sure the local server is running.');
+      }
+      
+      throw new Error(error.response?.data?.error || 'Remote account connection failed');
+    }
+  },
+
+  // ✅ НОВОЕ: Облачный вход
+  async cloudLogin(credentials) {
+    try {
+      // Отправляем данные облачного аккаунта на локальный сервер
+      const response = await api.post('/auth/cloud-login', {
+        email: credentials.email,
+        username: credentials.username,
+        masterPassword: credentials.masterPassword
+      });
+      
+      // Если успешно, сохраняем локальный токен
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Cloud login error:', error);
+      
+      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to local server. Please make sure the local server is running.');
+      }
+      
+      throw new Error(error.response?.data?.error || 'Cloud login failed');
+    }
+  },
+
+  // ✅ НОВОЕ: Верификация OTP для облачного входа
+  async verifyCloudOTP(otpCode, username) {
+    try {
+      const response = await api.post('/auth/verify-cloud-otp', {
+        otpCode: otpCode,
+        username: username
+      });
+      
+      // Если успешно, сохраняем локальный токен
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('OTP verification error:', error);
+      
+      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to local server. Please make sure the local server is running.');
+      }
+      
+      throw new Error(error.response?.data?.error || 'OTP verification failed');
+    }
+  },
+
+  // ✅ НОВОЕ: Использование transfer токена
+  async useTransferToken(transferToken) {
+    try {
+      // Отправляем transfer токен на локальный сервер
+      const response = await api.post('/auth/use-transfer', {
+        transferToken: transferToken
+      });
+      
+      // Если успешно, сохраняем локальный токен
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Transfer token error:', error);
+      
+      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to local server. Please make sure the local server is running.');
+      }
+      
+      throw new Error(error.response?.data?.error || 'Transfer token usage failed');
+    }
   }
 };
 
@@ -130,15 +261,49 @@ export const remoteService = {
   // Get remote connection status
   async getStatus() {
     try {
-      const response = await api.get('/remote/status');
-      return response.data;
+      console.log('🔄 Checking sync status...');
+      const response = await api.get('/sync/status');
+      console.log('🔄 Sync status response:', response.data);
+      
+      const { 
+        syncEnabled, 
+        remoteServerAvailable, 
+        hasRemoteAccount, 
+        canSync, 
+        unsyncedNotes, 
+        unsyncedPasswords 
+      } = response.data;
+      
+      return {
+        hasRemoteAccount: hasRemoteAccount,
+        remoteServerAvailable: remoteServerAvailable,
+        tokenValid: hasRemoteAccount, // Если есть аккаунт, считаем токен валидным
+        canSync: canSync,
+        message: hasRemoteAccount ? 
+          `Connected to cloud sync (${unsyncedNotes} notes, ${unsyncedPasswords} passwords unsynced)` : 
+          'Ready to setup cloud sync'
+      };
     } catch (error) {
-      console.error('Failed to get remote status:', error);
+      console.error('Failed to get sync status:', error);
+      
+      // Если ошибка 401, значит пользователь не авторизован локально
+      if (error.response?.status === 401) {
+        return {
+          hasRemoteAccount: false,
+          remoteServerAvailable: false,
+          tokenValid: false,
+          canSync: false,
+          message: 'Please login first'
+        };
+      }
+      
+      // Другие ошибки - проблемы с сервером
       return {
         hasRemoteAccount: false,
         remoteServerAvailable: false,
         tokenValid: false,
-        canSync: false
+        canSync: false,
+        message: 'Failed to connect to local server'
       };
     }
   },

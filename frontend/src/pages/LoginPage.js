@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Shield, Eye, EyeOff, Lock } from 'lucide-react';
 import { authService } from '../services/authService';
+import { secureService } from '../services/secureService';
 
 const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
   const [masterPassword, setMasterPassword] = useState('');
@@ -20,12 +21,23 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
     setError('');
 
     try {
+      // Сначала авторизуемся на сервере без передачи мастер-пароля
       const response = await authService.login(masterPassword);
+      
+      // Затем безопасно разблокируем хранилище в main процессе
+      await secureService.unlock(masterPassword, response.username || 'default-salt');
+      
+      // Передаем только безопасные данные (БЕЗ мастер-пароля)
       onLoginSuccess({
         username: response.username,
         userId: response.userId,
         token: response.token
+        // ❌ masterPassword НЕ передаем!
       });
+      
+      // Очищаем мастер-пароль из памяти
+      setMasterPassword('');
+      
     } catch (err) {
       console.error('Login failed:', err);
       setError(err.message);
@@ -112,6 +124,16 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
                   setMasterPassword(e.target.value);
                   setError('');
                 }}
+                onFocus={(e) => {
+                  e.target.style.backgroundColor = 'var(--bg-secondary)';
+                  e.target.style.borderColor = 'var(--color-success)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.backgroundColor = 'var(--bg-tertiary)';
+                  if (!error) {
+                    e.target.style.borderColor = 'var(--border-color)';
+                  }
+                }}
                 placeholder="Enter your master password"
                 style={{
                   width: '100%',
@@ -120,7 +142,7 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
                   fontSize: 'var(--font-size-md)',
                   borderRadius: 'var(--border-radius-md)',
                   border: `1px solid ${error ? 'var(--color-danger)' : 'var(--border-color)'}`,
-                  backgroundColor: 'var(--bg-primary)',
+                  backgroundColor: 'var(--bg-tertiary)',
                   color: 'var(--text-primary)',
                   transition: 'all var(--transition-fast)',
                   boxShadow: error ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none'

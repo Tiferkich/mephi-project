@@ -10,6 +10,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.http.HttpMethod;
 
 @Configuration
 @EnableWebSecurity
@@ -21,23 +22,33 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        System.out.println("🔥 REMOTE Настраиваем SecurityConfig...");
+        
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(auth -> auth
+                .cors(cors->cors.disable()) // Disable built-in CORS, use our SimpleCorsFilter
+                .authorizeHttpRequests(auth -> {
+                    System.out.println("🔥 REMOTE Настраиваем правила авторизации...");
+                    auth
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/auth/**",
                                 "/swagger-ui/**",
-                                "/v3/api-docs/**"
+                                "/v3/api-docs/**",
+                                "/actuator/health"
                         ).permitAll()
-                        .anyRequest().authenticated()
-                )
+                        // Allow all OPTIONS requests (CORS preflight)
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .anyRequest().authenticated();
+                    System.out.println("🔥 REMOTE Публичные эндпоинты: /auth/**, /api/auth/**, /swagger-ui/**, /v3/api-docs/**, /actuator/health");
+                })
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable);
 
+        System.out.println("🔥 REMOTE SecurityConfig настроен успешно!");
         return http.build();
     }
 }

@@ -30,21 +30,27 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
+        System.out.println("🔥 REMOTE JWT Filter: " + request.getMethod() + " " + request.getRequestURI());
+        
         final String authHeader = request.getHeader("Authorization");
+        System.out.println("🔥 REMOTE Auth Header: " + (authHeader != null ? "Bearer ****" : "null"));
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.out.println("🔥 REMOTE No JWT token found, continuing filter chain");
             filterChain.doFilter(request, response);
             return;
         }
 
         final String jwt = authHeader.substring(7);
         final String username = jwtService.extractUsername(jwt);
+        System.out.println("🔥 REMOTE JWT Username extracted: " + username);
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             Optional<User> userOptional = userRepository.findByUsername(username);
             
             if (userOptional.isPresent()) {
                 User user = userOptional.get();
+                System.out.println("🔥 REMOTE User found: " + user.getUsername());
                 
                 if (jwtService.isTokenValid(jwt, user)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
@@ -54,10 +60,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    System.out.println("🔥 REMOTE Authentication successful for: " + username);
+                } else {
+                    System.out.println("🔥 REMOTE JWT token is invalid for user: " + username);
                 }
+            } else {
+                System.out.println("🔥 REMOTE User not found: " + username);
             }
+        } else if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            System.out.println("🔥 REMOTE User already authenticated: " + SecurityContextHolder.getContext().getAuthentication().getName());
         }
 
+        System.out.println("🔥 REMOTE JWT Filter completed, continuing chain");
         filterChain.doFilter(request, response);
     }
 }

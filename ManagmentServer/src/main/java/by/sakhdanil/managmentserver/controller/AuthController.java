@@ -1,5 +1,6 @@
 package by.sakhdanil.managmentserver.controller;
 
+import by.sakhdanil.managmentserver.dto.auth.*;
 import by.sakhdanil.managmentserver.dto.user.JwtResponse;
 import by.sakhdanil.managmentserver.dto.user.LoginRequest;
 import by.sakhdanil.managmentserver.dto.user.RegisterRequest;
@@ -16,8 +17,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 @RequiredArgsConstructor
 @Tag(name = "🔐 Authentication", description = "Эндпоинты для аутентификации пользователей")
 public class AuthController {
@@ -92,7 +95,7 @@ public class AuthController {
                           "status": 400,
                           "error": "Bad Request",
                           "message": "Username must be between 3 and 50 characters",
-                          "path": "/api/auth/register"
+                          "path": "/auth/register"
                         }
                         """
                 )
@@ -111,7 +114,7 @@ public class AuthController {
                           "status": 409,
                           "error": "Conflict",
                           "message": "Username already exists",
-                          "path": "/api/auth/register"
+                          "path": "/auth/register"
                         }
                         """
                 )
@@ -187,7 +190,7 @@ public class AuthController {
                           "status": 400,
                           "error": "Bad Request",
                           "message": "Username is required",
-                          "path": "/api/auth/login"
+                          "path": "/auth/login"
                         }
                         """
                 )
@@ -206,7 +209,7 @@ public class AuthController {
                           "status": 401,
                           "error": "Unauthorized",
                           "message": "Invalid credentials",
-                          "path": "/api/auth/login"
+                          "path": "/auth/login"
                         }
                         """
                 )
@@ -225,7 +228,7 @@ public class AuthController {
                           "status": 404,
                           "error": "Not Found",
                           "message": "User not found",
-                          "path": "/api/auth/login"
+                          "path": "/auth/login"
                         }
                         """
                 )
@@ -234,6 +237,237 @@ public class AuthController {
     })
     public ResponseEntity<JwtResponse> login(@Valid @RequestBody LoginRequest request) {
         JwtResponse response = userService.login(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // ✅ НОВЫЕ ЭНДПОИНТЫ ДЛЯ СИНХРОНИЗАЦИИ И ВОССТАНОВЛЕНИЯ
+
+    @PostMapping("/sync-setup")
+    @Operation(
+        summary = "Подключение синхронизации",
+        description = "Настройка синхронизации с email и отправка OTP кода для подтверждения"
+    )
+    public ResponseEntity<Map<String, Object>> setupSync(@Valid @RequestBody SyncSetupRequest request) {
+        System.out.println("🔥 REMOTE AuthController.setupSync вызван!");
+        System.out.println("🔥 REMOTE Request data: username=" + request.getUsername() + ", email=" + request.getEmail());
+        
+        try {
+            Map<String, Object> response = userService.setupSync(request);
+            System.out.println("🔥 REMOTE setupSync успешно выполнен: " + response);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.out.println("🔥 REMOTE setupSync ошибка: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
+    }
+
+    @PostMapping("/verify-otp")
+    @Operation(
+        summary = "Подтверждение OTP кода",
+        description = "Верификация OTP кода для email подтверждения, восстановления или синхронизации"
+    )
+    public ResponseEntity<Map<String, Object>> verifyOtp(@Valid @RequestBody OtpVerificationRequest request) {
+        Map<String, Object> response = userService.verifyOtp(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/initiate-recovery")
+    @Operation(
+        summary = "Инициация восстановления аккаунта",
+        description = "Отправка OTP кода на email для восстановления аккаунта"
+    )
+    public ResponseEntity<Map<String, Object>> initiateRecovery(@RequestBody Map<String, String> request) {
+        String username = request.get("username");
+        String email = request.get("email");
+        Map<String, Object> response = userService.initiateAccountRecovery(username, email);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/complete-recovery")
+    @Operation(
+        summary = "Завершение восстановления аккаунта",
+        description = "Восстановление аккаунта с новым мастер-паролем после подтверждения OTP"
+    )
+    public ResponseEntity<Map<String, Object>> completeRecovery(@Valid @RequestBody AccountRecoveryRequest request) {
+        Map<String, Object> response = userService.completeAccountRecovery(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/create-transfer-token")
+    @Operation(
+        summary = "Создание токена переноса",
+        description = "Создание одноразового токена для переноса данных на другое устройство (действует 5 минут)"
+    )
+    public ResponseEntity<Map<String, Object>> createTransferToken(@Valid @RequestBody TransferTokenRequest request) {
+        Map<String, Object> response = userService.createTransferToken(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/use-transfer-token")
+    @Operation(
+        summary = "Использование токена переноса",
+        description = "Получение всех данных пользователя по одноразовому токену переноса"
+    )
+    public ResponseEntity<Map<String, Object>> useTransferToken(@RequestBody Map<String, String> request) {
+        String transferToken = request.get("transferToken");
+        Map<String, Object> response = userService.useTransferToken(transferToken);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/health")
+    @Operation(
+        summary = "Проверка состояния сервера",
+        description = "Эндпоинт для проверки доступности сервера"
+    )
+    public ResponseEntity<Map<String, String>> health() {
+        return ResponseEntity.ok(Map.of(
+            "status", "UP",
+            "timestamp", java.time.Instant.now().toString()
+        ));
+    }
+
+    @PostMapping("/test-email")
+    @Operation(
+        summary = "Тест отправки email",
+        description = "Тестовый эндпоинт для проверки настроек email"
+    )
+    public ResponseEntity<Map<String, Object>> testEmail(@RequestBody Map<String, String> request) {
+        try {
+            String testEmail = request.get("email");
+            if (testEmail == null || testEmail.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", "Email is required"
+                ));
+            }
+            
+            String otpCode = userService.getEmailService().generateOtpCode();
+            userService.getEmailService().sendSyncSetupOtp(testEmail, "Test User", otpCode);
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Test email sent successfully!",
+                "email", testEmail,
+                "otpCode", otpCode
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                "success", false,
+                "error", e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/cloud-login")
+    @Operation(
+        summary = "Облачный вход через email, username и master password",
+        description = """
+            Инициирует облачный вход через email, username и master password.
+            Отправляет OTP код на email для верификации.
+            
+            **Процесс:**
+            1. Проверяет учетные данные пользователя
+            2. Генерирует и отправляет OTP код на email
+            3. Возвращает sessionId для последующей верификации
+            
+            **Использование:**
+            - Облачный вход с другого устройства
+            - Альтернатива JWT токену
+            """
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "OTP код отправлен на email",
+            content = @Content(
+                mediaType = "application/json",
+                examples = @ExampleObject(
+                    name = "OTP отправлен",
+                    value = """
+                        {
+                          "requiresOTP": true,
+                          "sessionId": "session_12345",
+                          "username": "john_doe",
+                          "message": "OTP code sent to your email"
+                        }
+                        """
+                )
+            )
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Неверные учетные данные"
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Пользователь не найден"
+        )
+    })
+    public ResponseEntity<Map<String, Object>> cloudLogin(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        String username = request.get("username");
+        String masterPassword = request.get("masterPassword");
+        
+        Map<String, Object> response = userService.cloudLogin(email, username, masterPassword);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/verify-cloud-otp")
+    @Operation(
+        summary = "Верификация OTP для облачного входа",
+        description = """
+            Завершает облачный вход через верификацию OTP кода.
+            Возвращает полные данные пользователя и JWT токен.
+            
+            **Процесс:**
+            1. Проверяет OTP код
+            2. Возвращает JWT токен и данные пользователя
+            3. Включает все пароли и заметки для синхронизации
+            
+            **Результат:**
+            - JWT токен для авторизации
+            - Полные данные пользователя
+            - Все пароли и заметки
+            """
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "OTP верифицирован, возвращены данные пользователя",
+            content = @Content(
+                mediaType = "application/json",
+                examples = @ExampleObject(
+                    name = "Успешная верификация",
+                    value = """
+                        {
+                          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                          "userId": "123e4567-e89b-12d3-a456-426614174000",
+                          "username": "john_doe",
+                          "email": "john@example.com",
+                          "passwordHash": "$argon2id$v=19$m=4096,t=3,p=1$...",
+                          "salt": "a1b2c3d4e5f6",
+                          "passwords": [...],
+                          "notes": [...]
+                        }
+                        """
+                )
+            )
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Неверный OTP код"
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Сессия не найдена или истекла"
+        )
+    })
+    public ResponseEntity<Map<String, Object>> verifyCloudOTP(@RequestBody Map<String, String> request) {
+        String otpCode = request.get("otpCode");
+        String username = request.get("username");
+        
+        Map<String, Object> response = userService.verifyCloudOTP(otpCode, username);
         return ResponseEntity.ok(response);
     }
 }

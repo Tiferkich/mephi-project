@@ -2,7 +2,7 @@
   "name": "secure-password-manager",
   "version": "1.0.0",
   "description": "Desktop Password Manager with Local and Remote Sync",
-  "main": "build/electron.js",
+  "main": "electron.js",
   "homepage": "./",
   "private": true,
   "scripts": {
@@ -12,8 +12,10 @@
     "eject": "react-scripts eject",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-manual": "echo Please start React dev server first (npm start), then run: npm run electron",
     "electron-pack": "npm run build && electron-builder",
-    "preelectron-pack": "npm run build"
+    "preelectron-pack": "npm run build",
+    "start-dev": "start-electron.bat"
   },
   "keywords": [
     "password-manager",
@@ -26,7 +28,7 @@
   "license": "MIT",
   "dependencies": {
     "axios": "^1.7.9",
-    "electron": "^33.2.1",
+    "crypto-js": "^4.2.0",
     "electron-is-dev": "^3.0.1",
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.468.0",
@@ -37,8 +39,9 @@
   "devDependencies": {
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
+    "electron": "^36.3.2",
     "electron-builder": "^25.1.8",
-    "wait-on": "^8.0.1"
+    "wait-on": "^8.0.3"
   },
   "browserslist": {
     "production": [
@@ -60,6 +63,9 @@
     },
     "files": [
       "build/**/*",
+      "electron.js",
+      "src/main/**/*",
+      "src/preload/**/*",
       "node_modules/**/*"
     ],
     "mac": {

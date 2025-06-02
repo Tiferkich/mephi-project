@@ -30,33 +30,51 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         
+        System.out.println("🔐 LOCAL JWT Filter: " + request.getMethod() + " " + request.getRequestURI());
+        
         final String authHeader = request.getHeader("Authorization");
         final String jwt;
         final String username;
         
+        System.out.println("🔐 LOCAL Auth Header: " + (authHeader != null ? "Bearer ****" : "null"));
+        
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.out.println("🔐 LOCAL No JWT token found, continuing filter chain");
             filterChain.doFilter(request, response);
             return;
         }
         
         jwt = authHeader.substring(7);
         username = jwtService.extractUsername(jwt);
+        System.out.println("🔐 LOCAL JWT Username: " + username);
         
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-            
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+            try {
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+                System.out.println("🔐 LOCAL User found: " + userDetails.getUsername());
+                
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    authToken.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request)
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    System.out.println("🔐 LOCAL Authentication successful for: " + username);
+                } else {
+                    System.out.println("🔐 LOCAL JWT token is invalid for user: " + username);
+                }
+            } catch (Exception e) {
+                System.out.println("🔐 LOCAL Error during authentication: " + e.getMessage());
             }
+        } else if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            System.out.println("🔐 LOCAL User already authenticated: " + SecurityContextHolder.getContext().getAuthentication().getName());
         }
+        
+        System.out.println("🔐 LOCAL JWT Filter completed, continuing chain");
         filterChain.doFilter(request, response);
     }
 } 
