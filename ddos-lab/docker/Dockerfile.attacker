@@ -1,0 +1,30 @@
+FROM alpine:latest
+
+# Установка необходимых инструментов
+RUN apk add --no-cache \
+    curl \
+    wget \
+    bash \
+    python3 \
+    py3-pip \
+    hping3
+
+# Установка Python библиотек
+RUN pip3 install requests aiohttp asyncio
+
+# Копирование скриптов атак
+COPY attack_scripts/ /app/
+
+# Установка рабочей директории
+WORKDIR /app
+
+# Делаем скрипты исполняемыми
+RUN chmod +x *.sh *.py
+
+# Переменные окружения
+ENV TARGET_IP=192.168.56.10
+ENV TARGET_PORT=8080
+ENV ATTACK_TYPE=http_flood
+
+# Запуск атаки
+CMD ["./start_attack.sh"] 

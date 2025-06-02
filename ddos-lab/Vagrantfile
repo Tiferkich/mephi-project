@@ -1,0 +1,111 @@
+Vagrant.configure("2") do |config|
+  # Целевой сервер
+  config.vm.define "target" do |target|
+    target.vm.box = "ubuntu/bionic64"
+    target.vm.hostname = "target"
+    target.vm.network "private_network", ip: "192.168.56.10"
+    target.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+    end
+    target.vm.provision "shell", inline: <<-SHELL
+      sudo apt update
+      sudo apt install -y openjdk-17-jdk dstat htop iotop nginx
+      mkdir -p ~/app ~/metrics
+      
+      # Настройка простого веб-сервера для тестирования
+      sudo systemctl stop nginx
+      sudo systemctl disable nginx
+      
+      # Создание простого Java-приложения
+      cat > ~/app/SimpleServer.java << 'EOF'
+import java.io.*;
+import java.net.*;
+import java.util.concurrent.*;
+
+public class SimpleServer {
+    public static void main(String[] args) throws Exception {
+        ServerSocket server = new ServerSocket(8080);
+        ExecutorService pool = Executors.newFixedThreadPool(50);
+        
+        System.out.println("Server started on port 8080");
+        
+        while (true) {
+            Socket client = server.accept();
+            pool.execute(() -> {
+                try {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
+                    PrintWriter out = new PrintWriter(client.getOutputStream(), true);
+                    
+                    String request = in.readLine();
+                    if (request != null) {
+                        out.println("HTTP/1.1 200 OK");
+                        out.println("Content-Type: application/json");
+                        out.println("Content-Length: 25");
+                        out.println();
+                        out.println("{\"status\": \"success\"}");
+                    }
+                    client.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+    }
+}
+EOF
+      
+      # Компиляция Java-приложения
+      cd ~/app
+      javac SimpleServer.java
+      
+      # Создание systemd service
+      sudo tee /etc/systemd/system/simple-server.service > /dev/null << 'EOF'
+[Unit]
+Description=Simple Server for DDoS Testing
+After=network.target
+
+[Service]
+Type=simple
+User=vagrant
+WorkingDirectory=/home/vagrant/app
+ExecStart=/usr/bin/java SimpleServer
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      
+      sudo systemctl daemon-reload
+      sudo systemctl enable simple-server
+      sudo systemctl start simple-server
+      
+      # Настройка мониторинга
+      chmod +x /vagrant/scripts/metrics.sh
+      nohup /vagrant/scripts/metrics.sh &
+    SHELL
+  end
+
+  # Атакующие машины
+  (1..2).each do |i|
+    config.vm.define "attacker#{i}" do |attacker|
+      attacker.vm.box = "ubuntu/bionic64"
+      attacker.vm.hostname = "attacker#{i}"
+      attacker.vm.network "private_network", ip: "192.168.56.1#{i}"
+      attacker.vm.provider "virtualbox" do |vb|
+        vb.memory = "1024"
+        vb.cpus = 1
+      end
+      attacker.vm.provision "shell", inline: <<-SHELL
+        sudo apt update
+        sudo apt install -y apache2-utils curl docker.io hping3 python3 python3-pip
+        sudo systemctl start docker
+        sudo systemctl enable docker
+        sudo usermod -aG docker vagrant
+        
+        # Установка дополнительных инструментов для DDoS
+        pip3 install requests asyncio aiohttp
+      SHELL
+    end
+  end
+end 
