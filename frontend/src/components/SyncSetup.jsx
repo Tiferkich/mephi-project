@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { RefreshCw, X, Mail, CheckCircle, AlertTriangle, Clock, Send, ArrowLeft, Rocket } from 'lucide-react';
 import { remoteService } from '../services/remoteService';
 import './SyncSetup.css';
 
@@ -9,6 +10,7 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
   const [otpCode, setOtpCode] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [warning, setWarning] = useState('');
 
   const handleSetupSync = async (e) => {
     e.preventDefault();
@@ -19,6 +21,7 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
 
     setLoading(true);
     setError('');
+    setWarning('');
     
     try {
       const result = await remoteService.setupSync({
@@ -28,6 +31,11 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
 
       if (result.success) {
         setMessage('OTP code sent to your email. Please check your inbox.');
+        
+        if (result.warning) {
+          setWarning(result.warning);
+        }
+        
         setStep('verify');
       } else {
         setError(result.error);
@@ -97,13 +105,16 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
     <div className="sync-setup-overlay">
       <div className="sync-setup-modal">
         <div className="sync-setup-header">
-          <h2>🔄 Setup Cloud Sync</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+            <RefreshCw size={24} />
+            Setup Cloud Sync
+          </h2>
           <button 
             className="close-button" 
             onClick={onCancel}
             disabled={loading}
           >
-            ×
+            <X size={20} />
           </button>
         </div>
 
@@ -112,14 +123,26 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
             <div className="sync-info">
               <p>Connect your account to cloud sync to:</p>
               <ul>
-                <li>✅ Backup your data securely</li>
-                <li>✅ Access from multiple devices</li>
-                <li>✅ Recover if you lose local data</li>
+                <li style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                  <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                  Backup your data securely
+                </li>
+                <li style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                  <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                  Access from multiple devices
+                </li>
+                <li style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                  <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                  Recover if you lose local data
+                </li>
               </ul>
             </div>
 
             <div className="form-group">
-              <label htmlFor="email">📧 Email Address</label>
+              <label htmlFor="email" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <Mail size={16} />
+                Email Address
+              </label>
               <input
                 type="email"
                 id="email"
@@ -136,8 +159,24 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
               <p><strong>Username:</strong> {userData.username}</p>
             </div>
 
-            {error && <div className="error-message">❌ {error}</div>}
-            {message && <div className="success-message">✅ {message}</div>}
+            {error && (
+              <div className="error-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="success-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                {message}
+              </div>
+            )}
+            {warning && (
+              <div className="warning-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-warning)' }} />
+                {warning}
+              </div>
+            )}
 
             <div className="form-actions">
               <button 
@@ -152,8 +191,19 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
                 type="submit" 
                 className="setup-button"
                 disabled={loading}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                {loading ? '⏳ Setting up...' : '🚀 Setup Sync'}
+                {loading ? (
+                  <>
+                    <Clock size={16} className="animate-spin" />
+                    Setting up...
+                  </>
+                ) : (
+                  <>
+                    <Rocket size={16} />
+                    Setup Sync
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -162,13 +212,19 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
         {step === 'verify' && (
           <form onSubmit={handleVerifyOtp} className="sync-verify-form">
             <div className="verify-info">
-              <h3>📬 Check Your Email</h3>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <Mail size={20} />
+                Check Your Email
+              </h3>
               <p>We sent a 6-digit verification code to:</p>
               <strong>{email}</strong>
             </div>
 
             <div className="form-group">
-              <label htmlFor="otpCode">🔢 Verification Code</label>
+              <label htmlFor="otpCode" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <CheckCircle size={16} />
+                Verification Code
+              </label>
               <input
                 type="text"
                 id="otpCode"
@@ -183,8 +239,24 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
               <small>Enter the 6-digit code from your email</small>
             </div>
 
-            {error && <div className="error-message">❌ {error}</div>}
-            {message && <div className="success-message">✅ {message}</div>}
+            {error && (
+              <div className="error-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="success-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                {message}
+              </div>
+            )}
+            {warning && (
+              <div className="warning-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-warning)' }} />
+                {warning}
+              </div>
+            )}
 
             <div className="form-actions">
               <button 
@@ -192,29 +264,50 @@ const SyncSetup = ({ userData, onSuccess, onCancel }) => {
                 onClick={() => setStep('setup')}
                 className="back-button"
                 disabled={loading}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                ← Back
+                <ArrowLeft size={16} />
+                Back
               </button>
               <button 
                 type="button" 
                 onClick={resendOtp}
                 className="resend-button"
                 disabled={loading}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                📤 Resend Code
+                <Send size={16} />
+                Resend Code
               </button>
               <button 
                 type="submit" 
                 className="verify-button"
                 disabled={loading || otpCode.length !== 6}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                {loading ? '⏳ Verifying...' : '✅ Verify & Complete'}
+                {loading ? (
+                  <>
+                    <Clock size={16} className="animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={16} />
+                    Verify & Complete
+                  </>
+                )}
               </button>
             </div>
 
             <div className="help-text">
-              <p>🕐 Code expires in 10 minutes</p>
-              <p>📧 Check spam folder if you don't see the email</p>
+              <p style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <Clock size={16} style={{ color: 'var(--text-secondary)' }} />
+                Code expires in 10 minutes
+              </p>
+              <p style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <Mail size={16} style={{ color: 'var(--text-secondary)' }} />
+                Check spam folder if you don't see the email
+              </p>
             </div>
           </form>
         )}

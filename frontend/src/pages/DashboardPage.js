@@ -11,7 +11,12 @@ import {
   LogOut,
   Plus,
   Lock,
-  Unlock
+  Unlock,
+  CheckCircle,
+  AlertCircle,
+  Smartphone,
+  WifiOff,
+  Zap
 } from 'lucide-react';
 import { remoteService, syncService, authService, passwordService, noteService } from '../services/authService';
 import { secureService } from '../services/secureService';
@@ -53,6 +58,9 @@ const DashboardPage = ({ user, onLogout }) => {
 
   // Cloud Sync Manager state
   const [showSyncManager, setShowSyncManager] = useState(false);
+  
+  // ✅ ДОБАВЛЯЕМ: Состояние для расширенных опций синхронизации
+  const [showAdvancedSync, setShowAdvancedSync] = useState(false);
 
   // Toast system
   const { toasts, showSuccess, showError, showWarning, showInfo, hideToast } = useToast();
@@ -75,7 +83,8 @@ const DashboardPage = ({ user, onLogout }) => {
       
       await Promise.all([
         loadPasswords(),
-        loadNotes()
+        loadNotes(),
+        loadRemoteStatus()
       ]);
     } catch (error) {
       console.error('Failed to load initial data:', error);
@@ -147,6 +156,26 @@ const DashboardPage = ({ user, onLogout }) => {
     }
   };
 
+  // ✅ НОВАЯ ФУНКЦИЯ: Загрузка статуса синхронизации
+  const loadRemoteStatus = async () => {
+    try {
+      console.log('🔄 Loading remote sync status...');
+      const status = await remoteService.getStatus();
+      console.log('✅ Remote status loaded:', status);
+      setRemoteStatus(status);
+    } catch (error) {
+      console.error('❌ Failed to load remote status:', error);
+      // Оставляем значения по умолчанию при ошибке
+      setRemoteStatus({
+        hasRemoteAccount: false,
+        remoteServerAvailable: false,
+        tokenValid: false,
+        canSync: false,
+        message: 'Failed to check remote status'
+      });
+    }
+  };
+
   const handleSync = async () => {
     // ✅ Кнопка синхронизации работает только если пользователь подключен к облаку
     if (!remoteStatus.hasRemoteAccount || !remoteStatus.tokenValid) {
@@ -156,20 +185,177 @@ const DashboardPage = ({ user, onLogout }) => {
 
     setSyncLoading(true);
     try {
-      showInfo('Syncing data with cloud...');
+      showInfo('Starting data synchronization...');
       
-      // Здесь будут вызовы к реальным методам синхронизации когда они будут готовы
-      await syncService.pushToRemote();
-      await syncService.pullFromRemote();
+      // ✅ REAL SYNC: Push local changes to remote server
+      showInfo('📤 Pushing local changes to cloud...');
+      const pushResult = await syncService.pushToRemote({
+        syncNotes: true,
+        syncPasswords: true,
+        forceSync: false
+      });
       
-      showSuccess('Sync completed successfully!');
+      console.log('Push result:', pushResult);
       
-      // Reload data after sync
+      if (pushResult.success) {
+        const pushedItems = [];
+        if (pushResult.notesPushed > 0) pushedItems.push(`${pushResult.notesPushed} notes`);
+        if (pushResult.passwordsPushed > 0) pushedItems.push(`${pushResult.passwordsPushed} passwords`);
+        
+        if (pushedItems.length > 0) {
+          showInfo(`✅ Pushed ${pushedItems.join(' and ')} to cloud`);
+        }
+      }
+      
+      // ✅ REAL SYNC: Pull remote changes to local storage
+      showInfo('📥 Pulling cloud changes to local storage...');
+      const pullResult = await syncService.pullFromRemote();
+      
+      console.log('Pull result:', pullResult);
+      
+      if (pullResult.success) {
+        const pulledItems = [];
+        if (pullResult.notesPulled > 0) pulledItems.push(`${pullResult.notesPulled} notes`);
+        if (pullResult.passwordsPulled > 0) pulledItems.push(`${pullResult.passwordsPulled} passwords`);
+        
+        if (pulledItems.length > 0) {
+          showInfo(`📥 Pulled ${pulledItems.join(' and ')} from cloud`);
+        }
+      }
+      
+      // ✅ Show final success message
+      const totalPushed = (pushResult.notesPushed || 0) + (pushResult.passwordsPushed || 0);
+      const totalPulled = (pullResult.notesPulled || 0) + (pullResult.passwordsPulled || 0);
+      
+      if (totalPushed === 0 && totalPulled === 0) {
+        showSuccess('✅ Sync completed - Everything is already up to date!');
+      } else {
+        const changes = [];
+        if (totalPushed > 0) changes.push(`${totalPushed} items uploaded`);
+        if (totalPulled > 0) changes.push(`${totalPulled} items downloaded`);
+        showSuccess(`✅ Sync completed successfully! ${changes.join(', ')}`);
+      }
+      
+      // ✅ Reload data after sync to show any changes
       await Promise.all([loadPasswords(), loadNotes()]);
+      
+      // ✅ Update sync status to reflect any changes
+      await loadRemoteStatus();
       
     } catch (error) {
       console.error('Sync failed:', error);
-      showError(`Sync failed: ${error.message}`);
+      showError(`❌ Sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  // ✅ НОВАЯ ФУНКЦИЯ: Force Sync - принудительная синхронизация
+  const handleForceSync = async () => {
+    if (!remoteStatus.hasRemoteAccount || !remoteStatus.tokenValid) {
+      showWarning('Please setup cloud sync first using Cloud Sync Manager');
+      return;
+    }
+
+    // Подтверждение принудительной синхронизации
+    if (!confirm('⚠️ Force sync will overwrite any conflicting data with cloud version. Continue?')) {
+      return;
+    }
+
+    setSyncLoading(true);
+    try {
+      showWarning('⚡ Starting force synchronization...');
+      
+      // Force push with conflict resolution
+      showInfo('📤 Force pushing all local data to cloud...');
+      const pushResult = await syncService.pushToRemote({
+        syncNotes: true,
+        syncPasswords: true,
+        forceSync: true // This will overwrite remote conflicts
+      });
+      
+      console.log('Force push result:', pushResult);
+      
+      // Force pull all remote data
+      showInfo('📥 Force pulling all cloud data to local...');
+      const pullResult = await syncService.pullFromRemote();
+      
+      console.log('Force pull result:', pullResult);
+      
+      // Show comprehensive results
+      const totalPushed = (pushResult.notesPushed || 0) + (pushResult.passwordsPushed || 0);
+      const totalPulled = (pullResult.notesPulled || 0) + (pullResult.passwordsPulled || 0);
+      
+      showSuccess(`⚡ Force sync completed! Pushed: ${totalPushed}, Pulled: ${totalPulled} items`);
+      
+      // ✅ Reload data after force sync
+      await Promise.all([loadPasswords(), loadNotes()]);
+      
+      // ✅ Update sync status
+      await loadRemoteStatus();
+      
+    } catch (error) {
+      console.error('Force sync failed:', error);
+      showError(`❌ Force sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  // ✅ НОВЫЕ ФУНКЦИИ: Селективная синхронизация
+  const handleSyncPasswords = async () => {
+    if (!remoteStatus.hasRemoteAccount || !remoteStatus.tokenValid) {
+      showWarning('Please setup cloud sync first');
+      return;
+    }
+
+    setSyncLoading(true);
+    try {
+      showInfo('🔑 Syncing passwords only...');
+      
+      const pushResult = await syncService.pushToRemote({
+        syncNotes: false,
+        syncPasswords: true,
+        forceSync: false
+      });
+      
+      const pullResult = await syncService.pullFromRemote();
+      
+      showSuccess(`🔑 Password sync completed! Pushed: ${pushResult.passwordsPushed || 0}, Pulled: ${pullResult.passwordsPulled || 0}`);
+      
+      await Promise.all([loadPasswords(), loadRemoteStatus()]);
+      
+    } catch (error) {
+      showError(`❌ Password sync failed: ${error.message}`);
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleSyncNotes = async () => {
+    if (!remoteStatus.hasRemoteAccount || !remoteStatus.tokenValid) {
+      showWarning('Please setup cloud sync first');
+      return;
+    }
+
+    setSyncLoading(true);
+    try {
+      showInfo('📝 Syncing notes only...');
+      
+      const pushResult = await syncService.pushToRemote({
+        syncNotes: true,
+        syncPasswords: false,
+        forceSync: false
+      });
+      
+      const pullResult = await syncService.pullFromRemote();
+      
+      showSuccess(`📝 Notes sync completed! Pushed: ${pushResult.notesPushed || 0}, Pulled: ${pullResult.notesPulled || 0}`);
+      
+      await Promise.all([loadNotes(), loadRemoteStatus()]);
+      
+    } catch (error) {
+      showError(`❌ Notes sync failed: ${error.message}`);
     } finally {
       setSyncLoading(false);
     }
@@ -336,34 +522,34 @@ const DashboardPage = ({ user, onLogout }) => {
     switch (result.type) {
       case 'sync_setup':
         // Обновляем статус после успешной настройки облачной синхронизации
-        setRemoteStatus({
-          hasRemoteAccount: true,
-          remoteServerAvailable: true,
-          tokenValid: true,
-          canSync: true,
-          message: 'Connected to cloud sync'
-        });
         showSuccess('Cloud sync setup completed successfully!');
+        
+        // ✅ ОБНОВЛЯЕМ: Загружаем актуальный статус из API
+        loadRemoteStatus();
+        
+        // ✅ НОВОЕ: Показываем предупреждение если было передано
+        if (result.warning) {
+          setTimeout(() => {
+            showWarning(result.warning);
+          }, 2000); // Показываем через 2 секунды после успешного сообщения
+        }
         break;
         
       case 'account_recovery':
         // Полное восстановление аккаунта
-        setRemoteStatus({
-          hasRemoteAccount: true,
-          remoteServerAvailable: true,
-          tokenValid: true,
-          canSync: true,
-          message: 'Connected to cloud sync'
-        });
         showSuccess('Account recovered successfully! All your data has been restored.');
+        
+        // ✅ ОБНОВЛЯЕМ: Загружаем актуальный статус из API
+        loadRemoteStatus();
+        
         // Перезагружаем данные
         loadPasswords();
         loadNotes();
         break;
         
       case 'account_replaced':
-        // Аккаунт был полностью заменен - нужно перезагрузить приложение
-        showSuccess(result.message || 'Account replaced successfully!');
+        // ✅ ИСПРАВЛЕНИЕ: Аккаунт был полностью заменен - нужно перезагрузить приложение
+        showSuccess(result.message || 'Account replaced successfully! Your local account has been replaced with the cloud account.');
         
         // Обновляем токен авторизации
         if (result.token) {
@@ -373,19 +559,32 @@ const DashboardPage = ({ user, onLogout }) => {
         // Перезагружаем страницу для полного обновления состояния
         setTimeout(() => {
           window.location.reload();
-        }, 2000);
+        }, 3000); // Даем пользователю время прочитать сообщение
+        break;
+        
+      case 'account_imported':
+        // ✅ НОВОЕ: Новый аккаунт был импортирован из облака (первый раз)
+        showSuccess(result.message || 'Cloud account imported successfully!');
+        
+        // ✅ ОБНОВЛЯЕМ: Загружаем актуальный статус из API
+        loadRemoteStatus();
+        
+        // Обновляем токен авторизации
+        if (result.token) {
+          localStorage.setItem('authToken', result.token);
+        }
+        
+        // Перезагружаем данные
+        loadPasswords();
+        loadNotes();
         break;
         
       case 'remote_connected':
         // Удаленный аккаунт подключен к локальному
-        setRemoteStatus({
-          hasRemoteAccount: true,
-          remoteServerAvailable: true,
-          tokenValid: true,
-          canSync: true,
-          message: 'Connected to cloud sync - ready to synchronize'
-        });
         showSuccess(result.message || 'Remote account connected! Click "Sync Now" to synchronize your data.');
+        
+        // ✅ ОБНОВЛЯЕМ: Загружаем актуальный статус из API
+        loadRemoteStatus();
         
         // Обновляем токен авторизации если он изменился
         if (result.token) {
@@ -401,6 +600,19 @@ const DashboardPage = ({ user, onLogout }) => {
         // Перезагружаем данные
         loadPasswords();
         loadNotes();
+        break;
+        
+      default:
+        // Обработка устаревших или неизвестных типов ответов
+        showSuccess(result.message || 'Operation completed successfully!');
+        
+        // Если есть токен, обновляем его
+        if (result.token) {
+          localStorage.setItem('authToken', result.token);
+        }
+        
+        // ✅ ОБНОВЛЯЕМ: Загружаем актуальный статус из API
+        loadRemoteStatus();
         break;
     }
     setShowSyncManager(false);
@@ -662,28 +874,80 @@ const DashboardPage = ({ user, onLogout }) => {
           </div>
           
           <div style={{ marginBottom: 'var(--spacing-md)' }}>
-            <p style={{
-              fontSize: 'var(--font-size-sm)',
-              color: remoteStatus.remoteServerAvailable ? 'var(--color-success)' : 'var(--text-secondary)',
-              margin: '0 0 var(--spacing-xs) 0',
-              fontWeight: 'var(--font-weight-medium)'
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--spacing-xs)',
+              marginBottom: 'var(--spacing-xs)'
             }}>
-              Status: {remoteStatus.remoteServerAvailable ? 
-                (remoteStatus.hasRemoteAccount ? 
-                  (remoteStatus.tokenValid ? '🟢 Connected' : '🟡 Disconnected') 
-                  : '📱 Ready to connect') 
-                : '🔴 Server offline'
-              }
-            </p>
-            {remoteStatus.message && (
               <p style={{
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--text-tertiary)',
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--text-primary)',
                 margin: 0,
-                fontStyle: 'italic'
+                fontWeight: 'var(--font-weight-medium)'
               }}>
-                {remoteStatus.message}
+                Status:
               </p>
+              {remoteStatus.remoteServerAvailable ? (
+                remoteStatus.hasRemoteAccount ? (
+                  remoteStatus.tokenValid ? (
+                    <>
+                      <CheckCircle size={14} style={{ color: 'var(--color-success)' }} />
+                      <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>
+                        Connected
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle size={14} style={{ color: 'var(--color-warning)' }} />
+                      <span style={{ color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)' }}>
+                        Disconnected
+                      </span>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <Smartphone size={14} style={{ color: 'var(--color-info)' }} />
+                    <span style={{ color: 'var(--color-info)', fontSize: 'var(--font-size-sm)' }}>
+                      Ready to connect
+                    </span>
+                  </>
+                )
+              ) : (
+                <>
+                  <WifiOff size={14} style={{ color: 'var(--color-danger)' }} />
+                  <span style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
+                    Server offline
+                  </span>
+                </>
+              )}
+            </div>
+            
+            {/* Show unsynced count only if connected */}
+            {remoteStatus.hasRemoteAccount && remoteStatus.tokenValid && (
+              <div style={{
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-xs)'
+              }}>
+                {remoteStatus.unsyncedNotes > 0 || remoteStatus.unsyncedPasswords > 0 ? (
+                  <>
+                    <AlertCircle size={12} style={{ color: 'var(--color-warning)' }} />
+                    <span>
+                      {remoteStatus.unsyncedNotes || 0} notes, {remoteStatus.unsyncedPasswords || 0} passwords unsynced
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} style={{ color: 'var(--color-success)' }} />
+                    <span style={{ color: 'var(--color-success)' }}>
+                      All data synchronized
+                    </span>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -709,7 +973,7 @@ const DashboardPage = ({ user, onLogout }) => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 'var(--spacing-xs)',
-              marginBottom: 'var(--spacing-sm)'
+              marginBottom: 'var(--spacing-xs)'
             }}
           >
             {syncLoading && (
@@ -723,6 +987,48 @@ const DashboardPage = ({ user, onLogout }) => {
             )}
             {getSyncButtonText()}
           </button>
+
+          {/* Force Sync - only show if connected */}
+          {remoteStatus.hasRemoteAccount && remoteStatus.tokenValid && (
+            <button
+              onClick={() => handleForceSync()}
+              disabled={syncLoading}
+              style={{
+                width: '100%',
+                padding: 'var(--spacing-xs) var(--spacing-md)',
+                background: 'none',
+                color: 'var(--color-warning)',
+                border: '1px solid var(--color-warning)',
+                borderRadius: 'var(--border-radius-md)',
+                cursor: 'pointer',
+                transition: 'all var(--transition-fast)',
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: 'var(--font-weight-medium)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--spacing-xs)',
+                marginBottom: 'var(--spacing-sm)',
+                opacity: syncLoading ? 0.5 : 1
+              }}
+              onMouseEnter={(e) => {
+                if (!syncLoading) {
+                  e.target.style.background = 'var(--color-warning)';
+                  e.target.style.color = 'white';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!syncLoading) {
+                  e.target.style.background = 'none';
+                  e.target.style.color = 'var(--color-warning)';
+                }
+              }}
+              title="Force sync will overwrite conflicts with cloud data"
+            >
+              <Zap size={12} />
+              Force Sync
+            </button>
+          )}
 
           <button
             onClick={() => setShowSyncManager(true)}
@@ -754,6 +1060,129 @@ const DashboardPage = ({ user, onLogout }) => {
             <Cloud size={14} />
             Cloud Sync Manager
           </button>
+          
+          {/* Advanced Sync - collapsed by default, cleaner design */}
+          {remoteStatus.hasRemoteAccount && remoteStatus.tokenValid && (
+            <div style={{ marginTop: 'var(--spacing-sm)' }}>
+              <button
+                onClick={() => setShowAdvancedSync(!showAdvancedSync)}
+                style={{
+                  width: '100%',
+                  padding: 'var(--spacing-xs) var(--spacing-sm)',
+                  background: 'none',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  cursor: 'pointer',
+                  transition: 'all var(--transition-fast)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 'var(--font-weight-medium)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--spacing-xs)',
+                  marginBottom: showAdvancedSync ? 'var(--spacing-xs)' : 0
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.borderColor = 'var(--border-color-hover)';
+                  e.target.style.color = 'var(--text-primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.borderColor = 'var(--border-color)';
+                  e.target.style.color = 'var(--text-secondary)';
+                }}
+              >
+                <Settings size={12} />
+                {showAdvancedSync ? 'Hide Advanced' : 'Advanced Sync'}
+              </button>
+              
+              {showAdvancedSync && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 'var(--spacing-xs)',
+                    marginTop: 'var(--spacing-xs)'
+                  }}
+                >
+                  <button
+                    onClick={handleSyncPasswords}
+                    disabled={syncLoading}
+                    style={{
+                      padding: 'var(--spacing-xs)',
+                      background: 'var(--color-info)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 'var(--border-radius-sm)',
+                      cursor: syncLoading ? 'not-allowed' : 'pointer',
+                      fontSize: 'var(--font-size-xs)',
+                      fontWeight: 'var(--font-weight-medium)',
+                      opacity: syncLoading ? 0.5 : 1,
+                      transition: 'all var(--transition-fast)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!syncLoading) {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!syncLoading) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
+                    <Key size={10} />
+                    Passwords
+                  </button>
+                  
+                  <button
+                    onClick={handleSyncNotes}
+                    disabled={syncLoading}
+                    style={{
+                      padding: 'var(--spacing-xs)',
+                      background: 'var(--color-warning)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 'var(--border-radius-sm)',
+                      cursor: syncLoading ? 'not-allowed' : 'pointer',
+                      fontSize: 'var(--font-size-xs)',
+                      fontWeight: 'var(--font-weight-medium)',
+                      opacity: syncLoading ? 0.5 : 1,
+                      transition: 'all var(--transition-fast)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!syncLoading) {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!syncLoading) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
+                    <FileText size={10} />
+                    Notes
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
 

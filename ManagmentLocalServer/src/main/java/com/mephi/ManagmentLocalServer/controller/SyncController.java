@@ -89,7 +89,7 @@ public class SyncController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/pull")
+    @PostMapping("/pull")
     @Operation(
         summary = "Загрузить данные с удаленного сервера",
         description = """

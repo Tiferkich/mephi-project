@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Smartphone, X, Package, Upload, Download, AlertTriangle, Lock, User, Key, Clock, Copy, CheckCircle, ArrowLeft, Target, Zap, Ticket } from 'lucide-react';
 import { remoteService } from '../services/remoteService';
 import './DataTransfer.css';
 
@@ -150,20 +151,26 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
     <div className="transfer-overlay">
       <div className="transfer-modal">
         <div className="transfer-header">
-          <h2>📱 Device Transfer</h2>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+            <Smartphone size={24} />
+            Device Transfer
+          </h2>
           <button 
             className="close-button" 
             onClick={onCancel}
             disabled={loading}
           >
-            ×
+            <X size={20} />
           </button>
         </div>
 
         {step === 'select' && (
           <div className="transfer-select">
             <div className="transfer-info">
-              <h3>📦 Transfer Your Data</h3>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <Package size={20} />
+                Transfer Your Data
+              </h3>
               <p>Quickly move your password vault to another device using a secure 5-minute token</p>
             </div>
 
@@ -175,7 +182,9 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
                   setStep('authenticate');
                 }}
               >
-                <div className="option-icon">📤</div>
+                <div className="option-icon">
+                  <Upload size={32} style={{ color: 'var(--color-success)' }} />
+                </div>
                 <div className="option-content">
                   <h4>Generate Transfer Token</h4>
                   <p>Create a secure token to send your data to another device</p>
@@ -189,7 +198,9 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
                   setStep('input');
                 }}
               >
-                <div className="option-icon">📥</div>
+                <div className="option-icon">
+                  <Download size={32} style={{ color: 'var(--color-info)' }} />
+                </div>
                 <div className="option-content">
                   <h4>Use Transfer Token</h4>
                   <p>Enter a token received from another device to import data</p>
@@ -198,8 +209,14 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
             </div>
 
             <div className="transfer-warning">
-              <p>⚠️ Transfer tokens expire in 5 minutes for security</p>
-              <p>🔒 Your data is encrypted and secure during transfer</p>
+              <p style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-warning)' }} />
+                Transfer tokens expire in 5 minutes for security
+              </p>
+              <p style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <Lock size={16} style={{ color: 'var(--color-success)' }} />
+                Your data is encrypted and secure during transfer
+              </p>
             </div>
           </div>
         )}
@@ -207,12 +224,18 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
         {step === 'authenticate' && mode === 'create' && (
           <form onSubmit={handleCreateToken} className="transfer-auth-form">
             <div className="auth-info">
-              <h3>🔐 Authenticate to Generate Token</h3>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <Lock size={20} />
+                Authenticate to Generate Token
+              </h3>
               <p>Verify your credentials to create a secure transfer token</p>
             </div>
 
             <div className="form-group">
-              <label htmlFor="username">👤 Username</label>
+              <label htmlFor="username" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <User size={16} />
+                Username
+              </label>
               <input
                 type="text"
                 id="username"
@@ -225,7 +248,10 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="masterPassword">🔑 Master Password</label>
+              <label htmlFor="masterPassword" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <Key size={16} />
+                Master Password
+              </label>
               <input
                 type="password"
                 id="masterPassword"
@@ -237,8 +263,18 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
               />
             </div>
 
-            {error && <div className="error-message">❌ {error}</div>}
-            {message && <div className="success-message">✅ {message}</div>}
+            {error && (
+              <div className="error-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="success-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                {message}
+              </div>
+            )}
 
             <div className="form-actions">
               <button 
@@ -246,15 +282,28 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
                 onClick={() => setStep('select')}
                 className="back-button"
                 disabled={loading}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                ← Back
+                <ArrowLeft size={16} />
+                Back
               </button>
               <button 
                 type="submit" 
                 className="generate-button"
                 disabled={loading}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                {loading ? '⏳ Generating...' : '🎯 Generate Token'}
+                {loading ? (
+                  <>
+                    <Clock size={16} className="animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Target size={16} />
+                    Generate Token
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -263,7 +312,10 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
         {step === 'generate' && (
           <div className="transfer-token-display">
             <div className="token-info">
-              <h3>🎉 Transfer Token Generated!</h3>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <Zap size={20} style={{ color: 'var(--color-success)' }} />
+                Transfer Token Generated!
+              </h3>
               <p>Share this token with your other device. It expires in:</p>
               <div className="countdown">
                 <span className="time-display">{formatTime(timeLeft)}</span>
@@ -278,13 +330,18 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
                 className="copy-button"
                 onClick={copyToClipboard}
                 disabled={!transferToken}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                📋 Copy Token
+                <Copy size={16} />
+                Copy Token
               </button>
             </div>
 
             <div className="token-instructions">
-              <h4>📋 Instructions:</h4>
+              <h4 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <Copy size={16} style={{ color: 'var(--text-secondary)' }} />
+                Instructions:
+              </h4>
               <ol>
                 <li>Copy the token above</li>
                 <li>Open the app on your new device</li>
@@ -293,8 +350,18 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
               </ol>
             </div>
 
-            {error && <div className="error-message">❌ {error}</div>}
-            {message && <div className="success-message">✅ {message}</div>}
+            {error && (
+              <div className="error-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="success-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                {message}
+              </div>
+            )}
 
             <div className="form-actions">
               <button 
@@ -305,8 +372,10 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
                   setTimeLeft(0);
                 }}
                 className="done-button"
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                ✅ Done
+                <CheckCircle size={16} />
+                Done
               </button>
             </div>
           </div>
@@ -315,12 +384,18 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
         {step === 'input' && mode === 'use' && (
           <form onSubmit={handleUseToken} className="transfer-input-form">
             <div className="input-info">
-              <h3>📥 Enter Transfer Token</h3>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <Download size={20} />
+                Enter Transfer Token
+              </h3>
               <p>Paste the transfer token you received from your other device</p>
             </div>
 
             <div className="form-group">
-              <label htmlFor="inputToken">🎫 Transfer Token</label>
+              <label htmlFor="inputToken" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                <Ticket size={16} />
+                Transfer Token
+              </label>
               <input
                 type="text"
                 id="inputToken"
@@ -335,8 +410,18 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
               <small>Token should be 16 characters (letters and numbers)</small>
             </div>
 
-            {error && <div className="error-message">❌ {error}</div>}
-            {message && <div className="success-message">✅ {message}</div>}
+            {error && (
+              <div className="error-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="success-message" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                {message}
+              </div>
+            )}
 
             <div className="form-actions">
               <button 
@@ -344,15 +429,28 @@ const DataTransfer = ({ onSuccess, onCancel }) => {
                 onClick={() => setStep('select')}
                 className="back-button"
                 disabled={loading}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                ← Back
+                <ArrowLeft size={16} />
+                Back
               </button>
               <button 
                 type="submit" 
                 className="transfer-button"
                 disabled={loading || inputToken.length !== 16}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
               >
-                {loading ? '⏳ Transferring...' : '🚀 Import Data'}
+                {loading ? (
+                  <>
+                    <Clock size={16} className="animate-spin" />
+                    Transferring...
+                  </>
+                ) : (
+                  <>
+                    <Target size={16} />
+                    Import Data
+                  </>
+                )}
               </button>
             </div>
           </form>

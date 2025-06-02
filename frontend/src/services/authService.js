@@ -279,8 +279,10 @@ export const remoteService = {
         remoteServerAvailable: remoteServerAvailable,
         tokenValid: hasRemoteAccount, // Если есть аккаунт, считаем токен валидным
         canSync: canSync,
+        unsyncedNotes: unsyncedNotes || 0,
+        unsyncedPasswords: unsyncedPasswords || 0,
         message: hasRemoteAccount ? 
-          `Connected to cloud sync (${unsyncedNotes} notes, ${unsyncedPasswords} passwords unsynced)` : 
+          `Connected to cloud sync` : 
           'Ready to setup cloud sync'
       };
     } catch (error) {
@@ -293,6 +295,8 @@ export const remoteService = {
           remoteServerAvailable: false,
           tokenValid: false,
           canSync: false,
+          unsyncedNotes: 0,
+          unsyncedPasswords: 0,
           message: 'Please login first'
         };
       }
@@ -303,6 +307,8 @@ export const remoteService = {
         remoteServerAvailable: false,
         tokenValid: false,
         canSync: false,
+        unsyncedNotes: 0,
+        unsyncedPasswords: 0,
         message: 'Failed to connect to local server'
       };
     }

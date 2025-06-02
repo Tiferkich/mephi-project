@@ -50,6 +50,10 @@ public class SyncService {
             return SyncResponse.error("Remote sync is disabled");
         }
 
+        if (!userService.hasRemoteAccount()) {
+            return SyncResponse.error("Remote account not connected. Please setup cloud sync first.");
+        }
+
         try {
             int pushedNotes = pushNotesToRemote(request.isForceSync());
             int pushedPasswords = pushPasswordsToRemote(request.isForceSync());
@@ -73,6 +77,10 @@ public class SyncService {
     public SyncResponse pullFromRemote(ConflictResolutionStrategy conflictStrategy) {
         if (!remoteEnabled) {
             return SyncResponse.error("Remote sync is disabled");
+        }
+
+        if (!userService.hasRemoteAccount()) {
+            return SyncResponse.error("Remote account not connected. Please setup cloud sync first.");
         }
 
         try {
@@ -226,6 +234,12 @@ public class SyncService {
     private int pullNotesFromRemote(ConflictResolutionStrategy conflictStrategy) {
         try {
             String remoteToken = userService.getRemoteToken();
+            
+            if (remoteToken == null || remoteToken.trim().isEmpty()) {
+                log.error("Remote token is null or empty");
+                throw new RuntimeException("Remote token not available. Please reconnect to cloud account.");
+            }
+            
             WebClient webClient = webClientBuilder.baseUrl(remoteServerUrl).build();
 
             List<RemoteNoteResponse> remoteNotes = webClient.get()
@@ -279,6 +293,12 @@ public class SyncService {
     private int pullPasswordsFromRemote(ConflictResolutionStrategy conflictStrategy) {
         try {
             String remoteToken = userService.getRemoteToken();
+            
+            if (remoteToken == null || remoteToken.trim().isEmpty()) {
+                log.error("Remote token is null or empty");
+                throw new RuntimeException("Remote token not available. Please reconnect to cloud account.");
+            }
+            
             WebClient webClient = webClientBuilder.baseUrl(remoteServerUrl).build();
 
             List<RemotePasswordResponse> remotePasswords = webClient.get()

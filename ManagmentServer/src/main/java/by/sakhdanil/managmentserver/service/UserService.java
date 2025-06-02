@@ -102,12 +102,26 @@ public class UserService implements UserDetailsService {
                 }
             }
             
-            // Проверяем не занят ли email другим пользователем
-            if (userRepository.existsByEmail(request.getEmail())) {
+            // ✅ ИСПРАВЛЕНИЕ: Проверяем не занят ли email уже ВЕРИФИЦИРОВАННЫМ пользователем с таким же username
+            Optional<User> emailUserWithSameUsername = userRepository.findByUsernameAndEmail(request.getUsername(), request.getEmail());
+            if (emailUserWithSameUsername.isPresent() && emailUserWithSameUsername.get().isEmailVerified()) {
                 return Map.of(
                     "success", false,
-                    "error", "Email already registered by another user"
+                    "error", "This email is already verified for user '" + request.getUsername() + "'. Please use account recovery instead."
                 );
+            }
+            
+            // ✅ ИСПРАВЛЕНИЕ: Разрешаем использование одного email для разных username, 
+            // но предупреждаем что это может привести к конфликтам при восстановлении
+            Optional<User> existingEmailUser = userRepository.findByEmail(request.getEmail());
+            if (existingEmailUser.isPresent() && 
+                existingEmailUser.get().isEmailVerified() && 
+                !existingEmailUser.get().getUsername().equals(request.getUsername())) {
+                
+                log.warn("⚠️ Email {} already used by verified user '{}', but allowing registration for user '{}'", 
+                    request.getEmail(), existingEmailUser.get().getUsername(), request.getUsername());
+                
+                // Продолжаем регистрацию, но возвращаем предупреждение
             }
             
             // Создаем нового пользователя
@@ -130,11 +144,23 @@ public class UserService implements UserDetailsService {
             
             log.info("✅ Sync setup initiated for new user: {}", request.getUsername());
             
-            return Map.of(
+            Map<String, Object> response = Map.of(
                 "success", true,
                 "message", "OTP code sent to your email. Please verify to complete sync setup.",
                 "otpRequired", true
             );
+            
+            // Добавляем предупреждение если email уже используется
+            if (existingEmailUser.isPresent() && existingEmailUser.get().isEmailVerified()) {
+                return Map.of(
+                    "success", true,
+                    "message", "OTP code sent to your email. Please verify to complete sync setup.",
+                    "otpRequired", true,
+                    "warning", "This email is already used by another account. During account recovery, you'll need to specify both username and email."
+                );
+            }
+            
+            return response;
             
         } catch (Exception e) {
             log.error("❌ Sync setup failed: {}", e.getMessage());

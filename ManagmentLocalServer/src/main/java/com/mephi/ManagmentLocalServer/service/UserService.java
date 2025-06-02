@@ -506,23 +506,50 @@ public class UserService {
             boolean hasLocalUser = isSetup();
             
             if (hasLocalUser) {
-                // Обновляем существующего пользователя облачными данными
                 User existingUser = getCurrentUser();
-                existingUser.setRemoteId(remoteUserId);
-                existingUser.setRemoteToken(remoteToken);
-                userRepository.save(existingUser);
                 
-                String localToken = jwtService.generateToken(existingUser);
-                
-                log.info("Connected cloud account to existing local user: {}", existingUser.getUsername());
-                
-                return Map.of(
-                    "success", true,
-                    "message", "Cloud account connected to local user",
-                    "token", localToken,
-                    "username", existingUser.getUsername(),
-                    "userId", existingUser.getId()
-                );
+                // ✅ ИСПРАВЛЕНИЕ: Проверяем, является ли входящий аккаунт тем же самым пользователем
+                if (existingUser.getUsername().equals(remoteUsername)) {
+                    // Это тот же пользователь - просто обновляем связь с облаком
+                    existingUser.setRemoteId(remoteUserId);
+                    existingUser.setRemoteToken(remoteToken);
+                    userRepository.save(existingUser);
+                    
+                    String localToken = jwtService.generateToken(existingUser);
+                    
+                    log.info("Connected cloud account to existing local user: {}", existingUser.getUsername());
+                    
+                    return Map.of(
+                        "success", true,
+                        "type", "remote_connected",
+                        "message", "Cloud account connected to local user",
+                        "token", localToken,
+                        "username", existingUser.getUsername(),
+                        "userId", existingUser.getId()
+                    );
+                } else {
+                    // ✅ НОВОЕ: Это другой пользователь - выполняем полную замену аккаунта
+                    log.info("Different cloud user detected. Current local: '{}', Cloud: '{}'. Performing account replacement.", 
+                        existingUser.getUsername(), remoteUsername);
+                    
+                    // Вызываем метод replaceAccount для полной замены локального аккаунта
+                    Map<String, Object> replaceResult = replaceAccount(
+                        remoteUsername, 
+                        email, 
+                        masterPasswordHash, 
+                        salt, 
+                        remoteToken, 
+                        remoteUserId, 
+                        passwords, 
+                        notes
+                    );
+                    
+                    // Добавляем тип операции для фронтенда
+                    replaceResult.put("type", "account_replaced");
+                    replaceResult.put("message", "Your local account has been replaced with cloud account '" + remoteUsername + "'. All data from cloud has been imported.");
+                    
+                    return replaceResult;
+                }
                 
             } else {
                 // Создаем нового локального пользователя на основе облачного аккаунта
@@ -549,6 +576,7 @@ public class UserService {
                 
                 return Map.of(
                     "success", true,
+                    "type", "account_imported",
                     "message", "Cloud account successfully imported",
                     "token", localToken,
                     "username", remoteUsername,
