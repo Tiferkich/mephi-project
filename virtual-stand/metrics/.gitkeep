@@ -1,0 +1,2 @@
+# This file ensures the metrics directory is tracked by git
+# CSV and JSON files with attack results will be saved here 

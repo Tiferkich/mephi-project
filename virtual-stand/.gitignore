@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Results and metrics
+metrics/*.csv
+metrics/*.json
+graphs/*.png
+graphs/*.jpg
+graphs/*.svg
+
+# Keep example files
+!metrics/.gitkeep
+!graphs/.gitkeep
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp 
