@@ -19,11 +19,17 @@ public class SimpleCorsFilter implements Filter {
 
         System.out.println("🔥 REMOTE CORS Filter working: " + request.getMethod() + " " + request.getRequestURI());
         
-        response.setHeader("Access-Control-Allow-Origin", "*");
+        // Получаем origin из запроса для поддержки credentials
+        String origin = request.getHeader("Origin");
+        if (origin != null) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+        } else {
+            response.setHeader("Access-Control-Allow-Origin", "*");
+        }
         response.setHeader("Access-Control-Allow-Credentials", "true");
         response.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE, PUT, PATCH");
         response.setHeader("Access-Control-Max-Age", "3600");
-        response.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, X-Requested-With, remember-me, Authorization");
+        response.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, X-Requested-With, remember-me, Authorization, X-Remote-Token");
 
         System.out.println("🔥 REMOTE CORS Headers added to response");
 

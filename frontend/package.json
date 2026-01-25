@@ -11,7 +11,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "electron": "electron .",
-    "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on http://localhost:3000 && electron .\"",
     "electron-manual": "echo Please start React dev server first (npm start), then run: npm run electron",
     "electron-pack": "npm run build && electron-builder",
     "preelectron-pack": "npm run build",
@@ -39,7 +39,7 @@
   "devDependencies": {
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
-    "electron": "^36.3.2",
+    "electron": "^36.9.5",
     "electron-builder": "^25.1.8",
     "wait-on": "^8.0.3"
   },

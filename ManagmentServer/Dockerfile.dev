@@ -1,0 +1,40 @@
+# =============================================================================
+# 🔥 MANAGEMENT SERVER - DEVELOPMENT DOCKERFILE (HOT RELOAD)
+# =============================================================================
+# Использует Spring Boot DevTools для автоматической перезагрузки
+# при изменении .java файлов
+# =============================================================================
+
+FROM maven:3.9-eclipse-temurin-17-alpine
+
+LABEL maintainer="FakeReality Team"
+LABEL description="Management Server - Development with Hot Reload"
+
+# Устанавливаем необходимые инструменты
+RUN apk add --no-cache curl bash
+
+WORKDIR /app
+
+# Копируем pom.xml для загрузки зависимостей
+COPY pom.xml ./
+
+# Загружаем зависимости (кэшируется Docker layer)
+RUN mvn dependency:go-offline -B
+
+# Копируем исходный код (будет перезаписан volume mount)
+COPY src ./src
+
+# Порты
+# 8080 - HTTP API
+# 35729 - LiveReload
+EXPOSE 8080 35729
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8080/actuator/health || exit 1
+
+# Запуск с Spring DevTools (hot reload)
+CMD ["mvn", "spring-boot:run", \
+     "-Dspring-boot.run.jvmArguments=-Dspring.devtools.restart.enabled=true -Dspring.devtools.livereload.enabled=true", \
+     "-Dspring.devtools.restart.poll-interval=2s", \
+     "-Dspring.devtools.restart.quiet-period=1s"]

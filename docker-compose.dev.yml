@@ -1,0 +1,158 @@
+# =============================================================================
+# 🔥 MEPHI-PROJECT: DOCKER COMPOSE FOR DEVELOPMENT (HOT RELOAD)
+# =============================================================================
+#
+# Запуск:   docker-compose -f docker-compose.dev.yml up --build
+# Остановка: docker-compose -f docker-compose.dev.yml down
+#
+# Порты:
+#   - Frontend (React):       http://localhost:3000
+#   - Local Server (Spring):  http://localhost:3001
+#   - Remote Server (Spring): http://localhost:8080
+#   - PostgreSQL:             localhost:5432
+#
+# Hot Reload:
+#   ✅ Frontend: Изменения в frontend/src/ автоматически обновляют браузер
+#   ✅ Local Server: Spring DevTools перезагружает при изменении .java файлов
+#   ✅ Remote Server: Spring DevTools перезагружает при изменении .java файлов
+#
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # 🗄️ POSTGRESQL DATABASE (для Remote Server)
+  # ===========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: mephi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vaultdb
+      POSTGRES_USER: vaultuser
+      POSTGRES_PASSWORD: vaultpass
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mephi-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vaultuser -d vaultdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================================================
+  # ☁️ REMOTE SERVER (Spring Boot + PostgreSQL) - HOT RELOAD
+  # ===========================================================================
+  remote-server:
+    build:
+      context: ./ManagmentServer
+      dockerfile: Dockerfile.dev
+    container_name: mephi-remote-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Spring DataSource
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/vaultdb
+      SPRING_DATASOURCE_USERNAME: vaultuser
+      SPRING_DATASOURCE_PASSWORD: vaultpass
+      # Disable Spring Boot Docker Compose support (we're already inside Docker)
+      SPRING_DOCKER_COMPOSE_ENABLED: "false"
+      # Spring DevTools (Hot Reload)
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+      SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
+      # JWT Secret
+      JWT_SECRET: remote-server-secret-key-which-should-be-at-least-256-bits-long-for-security-purposes-12345
+      # VirusTotal API (для модуля проверки файлов)
+      VIRUSTOTAL_API_KEY: 0f4c6159c2be8b8ecf1ec4c72e2527166b4ac6b35046461b4c3e40802bfa280f
+      # Logging
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_BY_SAKHDANIL: DEBUG
+    ports:
+      - "8080:8080"
+      - "35729:35729"  # LiveReload порт
+    volumes:
+      # Монтирование исходного кода для hot reload
+      - ./ManagmentServer/src:/app/src:cached
+      # Maven cache (ускоряет пересборку)
+      - maven_cache_remote:/root/.m2
+    networks:
+      - mephi-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ===========================================================================
+  # 🔐 LOCAL SERVER (Spring Boot + SQLite) - HOT RELOAD
+  # ===========================================================================
+  local-server:
+    build:
+      context: ./ManagmentLocalServer
+      dockerfile: Dockerfile.dev
+    container_name: mephi-local-server
+    depends_on:
+      remote-server:
+        condition: service_healthy
+    environment:
+      # Spring Profile
+      SPRING_PROFILES_ACTIVE: docker,dev
+      # Disable Spring Boot Docker Compose support (we're already inside Docker)
+      SPRING_DOCKER_COMPOSE_ENABLED: "false"
+      # Spring DevTools (Hot Reload)
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+      SPRING_DEVTOOLS_LIVERELOAD_ENABLED: "true"
+      # JWT Secret
+      JWT_SECRET: local-server-secret-key-which-should-be-at-least-256-bits-long-for-security-purposes
+      # Remote Server URL
+      REMOTE_SERVER_URL: http://remote-server:8080
+      # Logging
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_COM_MEPHI: DEBUG
+    ports:
+      - "3001:3001"
+      - "35730:35729"  # LiveReload порт (другой, чтобы не конфликтовал)
+    volumes:
+      # Монтирование исходного кода для hot reload
+      - ./ManagmentLocalServer/src:/app/src:cached
+      # SQLite database (persistent)
+      - local_server_data:/app/data
+      # Maven cache (ускоряет пересборку)
+      - maven_cache_local:/root/.m2
+    networks:
+      - mephi-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+# =============================================================================
+# 📦 VOLUMES
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  local_server_data:
+    driver: local
+  maven_cache_remote:
+    driver: local
+  maven_cache_local:
+    driver: local
+
+# =============================================================================
+# 🌐 NETWORKS
+# =============================================================================
+networks:
+  mephi-network:
+    driver: bridge
+

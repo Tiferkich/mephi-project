@@ -42,8 +42,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         final String jwt = authHeader.substring(7);
-        final String username = jwtService.extractUsername(jwt);
-        System.out.println("🔥 REMOTE JWT Username extracted: " + username);
+        System.out.println("🔥 REMOTE JWT Token (first 50 chars): " + jwt.substring(0, Math.min(50, jwt.length())) + "...");
+        
+        String username;
+        try {
+            username = jwtService.extractUsername(jwt);
+            System.out.println("🔥 REMOTE JWT Username extracted: " + username);
+        } catch (Exception e) {
+            System.out.println("🔥 REMOTE JWT Token parsing failed: " + e.getMessage());
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             Optional<User> userOptional = userRepository.findByUsername(username);

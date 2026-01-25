@@ -1,0 +1,28 @@
+
+FROM node:20-alpine
+
+LABEL maintainer="FakeReality Team"
+LABEL description="Frontend React - Development with Hot Reload"
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm ci
+
+COPY . .
+
+EXPOSE 3000
+
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+ENV FAST_REFRESH=true
+
+
+CMD ["npm", "start"]
+
+
+
+

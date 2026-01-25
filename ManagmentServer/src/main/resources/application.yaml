@@ -40,7 +40,7 @@ mail:
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET:your-very-long-secret-key-which-should-be-at-least-256-bits-long-for-security}
-  expiration: ${JWT_EXPIRATION:3600000} # 1 hour in milliseconds
+  expiration: ${JWT_EXPIRATION:86400000} # 24 hours in milliseconds (increased for dev)
 
 # ✅ НОВОЕ: Application Configuration
 app:
@@ -81,3 +81,15 @@ management:
   endpoint:
     health:
       show-details: always
+
+# VirusTotal API Configuration (для проверки файлов на вирусы)
+virustotal:
+  api-key: ${VIRUSTOTAL_API_KEY:}  # Получить на https://www.virustotal.com/gui/join-us
+  api-url: https://www.virustotal.com/api/v3
+  enabled: ${VIRUSTOTAL_ENABLED:true}
+  polling-interval: 30000  # 30 секунд между проверками статуса
+
+# File Upload Configuration
+spring.servlet.multipart:
+  max-file-size: 50MB
+  max-request-size: 55MB
