@@ -25,6 +25,9 @@ public class SecureNote {
     @NotNull
     private User user;
     
+    @Column
+    private String widgetId; // ID виджета к которому привязана запись
+    
     @NotBlank
     @Column(nullable = false)
     private String encryptedTitle; // зашифрованное название заметки

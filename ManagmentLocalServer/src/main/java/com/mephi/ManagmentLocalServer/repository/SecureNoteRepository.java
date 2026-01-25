@@ -19,6 +19,8 @@ public interface SecureNoteRepository extends JpaRepository<SecureNote, Long> {
     
     List<SecureNote> findByUserOrderByUpdatedAtDesc(User user);
     
+    List<SecureNote> findByUserAndWidgetIdOrderByUpdatedAtDesc(User user, String widgetId);
+    
     Optional<SecureNote> findByIdAndUser(Long id, User user);
     
     Optional<SecureNote> findByRemoteIdAndUser(String remoteId, User user);

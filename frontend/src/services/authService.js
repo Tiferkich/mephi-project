@@ -257,6 +257,19 @@ export const authService = {
   }
 };
 
+// Проверка истечения JWT токена
+function isTokenExpired(token) {
+  if (!token) return true;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const exp = payload.exp * 1000; // JWT exp в секундах, конвертируем в мс
+    return Date.now() >= exp;
+  } catch (e) {
+    console.error('[AuthService] Failed to parse token:', e);
+    return true;
+  }
+}
+
 export const remoteService = {
   // Get remote connection status
   async getStatus() {
@@ -269,21 +282,26 @@ export const remoteService = {
         syncEnabled, 
         remoteServerAvailable, 
         hasRemoteAccount, 
+        tokenValid,  // Теперь проверяется на сервере
         canSync, 
         unsyncedNotes, 
         unsyncedPasswords 
       } = response.data;
       
+      console.log('🔄 Token status from server: hasRemoteAccount=', hasRemoteAccount, 'tokenValid=', tokenValid);
+      
       return {
         hasRemoteAccount: hasRemoteAccount,
         remoteServerAvailable: remoteServerAvailable,
-        tokenValid: hasRemoteAccount, // Если есть аккаунт, считаем токен валидным
+        tokenValid: tokenValid,
         canSync: canSync,
         unsyncedNotes: unsyncedNotes || 0,
         unsyncedPasswords: unsyncedPasswords || 0,
-        message: hasRemoteAccount ? 
+        message: tokenValid ? 
           `Connected to cloud sync` : 
-          'Ready to setup cloud sync'
+          hasRemoteAccount && !tokenValid ?
+            'Cloud session expired. Please re-login.' :
+            'Ready to setup cloud sync'
       };
     } catch (error) {
       console.error('Failed to get sync status:', error);

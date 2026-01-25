@@ -1,0 +1,80 @@
+/**
+ * WidgetGrid Styles
+ */
+
+.widget-grid {
+    width: 100%;
+    padding: var(--spacing-md);
+    overflow: auto;
+}
+
+.widget-grid__container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-lg);
+    align-items: flex-start;
+    align-content: flex-start;
+    width: 100%;
+}
+
+/* Add Widget Button */
+.widget-grid__add-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+    min-height: 200px;
+    background: transparent;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--border-radius-lg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-normal);
+    font-size: var(--font-size-md);
+}
+
+.widget-grid__add-btn:hover {
+    border-color: var(--color-info);
+    color: var(--color-info);
+    background: rgba(45, 100, 190, 0.05);
+}
+
+.widget-grid__add-btn i {
+    font-size: 48px;
+}
+
+.widget-grid__add-btn span {
+    font-weight: var(--font-weight-medium);
+}
+
+/* Empty State */
+.widget-grid__empty {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-2xl);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.widget-grid__empty i {
+    font-size: 64px;
+    margin-bottom: var(--spacing-lg);
+    opacity: 0.3;
+}
+
+.widget-grid__empty-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-sm);
+    color: var(--text-primary);
+}
+
+.widget-grid__empty-text {
+    font-size: var(--font-size-sm);
+    max-width: 300px;
+}
+

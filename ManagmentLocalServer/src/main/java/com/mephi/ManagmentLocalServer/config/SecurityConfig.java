@@ -35,7 +35,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/auth/**",
                                 "/api/remote/**",
-                                "/remote-proxy/**",
+                                "/remote-proxy/health-check",  // Только health-check публичный
+                                "/remote-proxy/auth/**",       // Auth эндпоинты для синхронизации
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/api-docs/**",
@@ -43,7 +44,7 @@ public class SecurityConfig {
                         ).permitAll()
                         // Разрешаем ALL OPTIONS запросы (CORS preflight)
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Все остальные требуют аутентификации
+                        // Все остальные требуют аутентификации (включая /remote-proxy/files/**)
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

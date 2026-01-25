@@ -14,7 +14,8 @@ const NoteList = ({
   notes = [], 
   onEdit, 
   onDelete, 
-  loading = false 
+  loading = false,
+  compact = false 
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
@@ -78,104 +79,108 @@ const NoteList = ({
     );
   }
 
+  const containerStyle = compact ? {} : {
+    background: 'var(--bg-secondary)',
+    borderRadius: 'var(--border-radius-lg)',
+    border: '1px solid var(--border-color)',
+    boxShadow: 'var(--shadow-md)',
+    overflow: 'hidden'
+  };
+
   return (
-    <div style={{
-      background: 'var(--bg-secondary)',
-      borderRadius: 'var(--border-radius-lg)',
-      border: '1px solid var(--border-color)',
-      boxShadow: 'var(--shadow-md)',
-      overflow: 'hidden'
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: 'var(--spacing-lg)',
-        borderBottom: '1px solid var(--border-color)',
-        background: 'var(--bg-primary)'
-      }}>
+    <div style={containerStyle}>
+      {/* Header - hidden in compact mode */}
+      {!compact && (
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 'var(--spacing-md)'
+          padding: 'var(--spacing-lg)',
+          borderBottom: '1px solid var(--border-color)',
+          background: 'var(--bg-primary)'
         }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 'var(--spacing-sm)'
+            justifyContent: 'space-between',
+            marginBottom: 'var(--spacing-md)'
           }}>
-            <FileText style={{ color: 'var(--color-warning)' }} />
-            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>
-              Notes ({filteredNotes.length})
-            </h3>
-          </div>
-        </div>
-
-        {/* Search and Filter */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr auto',
-          gap: 'var(--spacing-md)'
-        }}>
-          <div style={{ position: 'relative' }}>
-            <Search 
-              size={16} 
-              style={{
-                position: 'absolute',
-                left: 'var(--spacing-md)',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-secondary)'
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Search notes..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                padding: 'var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 40px',
-                fontSize: 'var(--font-size-sm)',
-                borderRadius: 'var(--border-radius-md)',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-secondary)',
-                color: 'var(--text-primary)'
-              }}
-            />
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--spacing-sm)'
+            }}>
+              <FileText style={{ color: 'var(--color-warning)' }} />
+              <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>
+                Notes ({filteredNotes.length})
+              </h3>
+            </div>
           </div>
 
-          <div style={{ position: 'relative' }}>
-            <Filter 
-              size={16} 
-              style={{
-                position: 'absolute',
-                left: 'var(--spacing-md)',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-secondary)'
-              }}
-            />
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              style={{
-                padding: 'var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 40px',
-                fontSize: 'var(--font-size-sm)',
-                borderRadius: 'var(--border-radius-md)',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
-                minWidth: '120px'
-              }}
-            >
-              {getTypeOptions().map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+          {/* Search and Filter */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            gap: 'var(--spacing-md)'
+          }}>
+            <div style={{ position: 'relative' }}>
+              <Search 
+                size={16} 
+                style={{
+                  position: 'absolute',
+                  left: 'var(--spacing-md)',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-secondary)'
+                }}
+              />
+              <input
+                type="text"
+                placeholder="Search notes..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: 'var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 40px',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 'var(--border-radius-md)',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <Filter 
+                size={16} 
+                style={{
+                  position: 'absolute',
+                  left: 'var(--spacing-md)',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-secondary)'
+                }}
+              />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                style={{
+                  padding: 'var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 40px',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 'var(--border-radius-md)',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  minWidth: '120px'
+                }}
+              >
+                {getTypeOptions().map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Notes List */}
       <div style={{ maxHeight: '500px', overflow: 'auto' }}>

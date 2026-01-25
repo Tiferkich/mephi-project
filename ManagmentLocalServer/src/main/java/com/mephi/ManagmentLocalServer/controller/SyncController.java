@@ -181,11 +181,16 @@ public class SyncController {
     public ResponseEntity<Map<String, Object>> getSyncStatus() {
         boolean remoteAvailable = syncService.checkRemoteConnection();
         boolean hasRemoteAccount = false;
+        boolean tokenValid = false;
         int unsyncedNotes = 0;
         int unsyncedPasswords = 0;
         
         try {
             hasRemoteAccount = userService.hasRemoteAccount();
+            // Проверяем валидность remote токена в БД
+            if (hasRemoteAccount) {
+                tokenValid = userService.isRemoteTokenValid();
+            }
             unsyncedNotes = noteService.countUnsyncedNotes();
             unsyncedPasswords = passwordService.countUnsyncedPasswords();
         } catch (Exception e) {
@@ -196,9 +201,10 @@ public class SyncController {
             "syncEnabled", true, // Получить из конфигурации
             "remoteServerAvailable", remoteAvailable,
             "hasRemoteAccount", hasRemoteAccount,
+            "tokenValid", tokenValid,
             "unsyncedNotes", unsyncedNotes,
             "unsyncedPasswords", unsyncedPasswords,
-            "canSync", hasRemoteAccount && remoteAvailable
+            "canSync", hasRemoteAccount && remoteAvailable && tokenValid
         );
         
         return ResponseEntity.ok(status);

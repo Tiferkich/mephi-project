@@ -151,6 +151,41 @@ public class UserService {
         }
     }
 
+    /**
+     * Проверяет валидность remote JWT токена (не истёк ли)
+     */
+    public boolean isRemoteTokenValid() {
+        try {
+            User user = getCurrentUser();
+            String remoteToken = user.getRemoteToken();
+            
+            if (remoteToken == null || remoteToken.isEmpty()) {
+                return false;
+            }
+            
+            // Парсим JWT и проверяем exp
+            String[] parts = remoteToken.split("\\.");
+            if (parts.length != 3) {
+                return false;
+            }
+            
+            String payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var claims = mapper.readTree(payload);
+            
+            long exp = claims.get("exp").asLong();
+            long now = System.currentTimeMillis() / 1000;
+            
+            boolean valid = now < exp;
+            log.debug("Remote token validity check: exp={}, now={}, valid={}", exp, now, valid);
+            return valid;
+            
+        } catch (Exception e) {
+            log.warn("Failed to check remote token validity: {}", e.getMessage());
+            return false;
+        }
+    }
+
     @Transactional
     public Map<String, Object> replaceAccount(
             String username, 
@@ -206,8 +241,10 @@ public class UserService {
             return Map.of(
                 "success", true,
                 "message", "Account replaced successfully",
-                "token", jwtToken,
+                "token", remoteToken,  // Возвращаем remote token для доступа к облаку
+                "localToken", jwtToken,
                 "username", username,
+                "userId", remoteId,  // Возвращаем remote userId
                 "passwordsImported", passwordsImported,
                 "notesImported", notesImported
             );
@@ -523,9 +560,10 @@ public class UserService {
                         "success", true,
                         "type", "remote_connected",
                         "message", "Cloud account connected to local user",
-                        "token", localToken,
+                        "token", remoteToken,  // Возвращаем remote token для доступа к облаку
+                        "localToken", localToken,
                         "username", existingUser.getUsername(),
-                        "userId", existingUser.getId()
+                        "userId", remoteUserId  // Возвращаем remote userId
                     );
                 } else {
                     // ✅ НОВОЕ: Это другой пользователь - выполняем полную замену аккаунта
@@ -578,9 +616,10 @@ public class UserService {
                     "success", true,
                     "type", "account_imported",
                     "message", "Cloud account successfully imported",
-                    "token", localToken,
+                    "token", remoteToken,  // Возвращаем remote token для доступа к облаку
+                    "localToken", localToken,
                     "username", remoteUsername,
-                    "userId", newUser.getId(),
+                    "userId", remoteUserId,  // Возвращаем remote userId
                     "passwordsImported", passwordsImported,
                     "notesImported", notesImported
                 );

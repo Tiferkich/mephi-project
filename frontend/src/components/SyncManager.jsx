@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Cloud, X, RefreshCw, CheckCircle, Smartphone, AlertCircle, WifiOff, Shield, Lock, Mail, Clock, Key, AlertTriangle } from 'lucide-react';
 import SyncSetup from './SyncSetup';
 import DataTransfer from './DataTransfer';
-import { remoteService } from '../services/authService';
+import { remoteService as authRemoteService } from '../services/authService';
+import { remoteService } from '../services/remoteService';
 import './SyncManager.css';
 
 const SyncManager = ({ userData, onSuccess, onCancel }) => {
@@ -28,7 +29,7 @@ const SyncManager = ({ userData, onSuccess, onCancel }) => {
     try {
       setStatusLoading(true);
       console.log('🔄 SyncManager: Checking remote status...');
-      const status = await remoteService.getStatus();
+      const status = await authRemoteService.getStatus();
       console.log('🔄 SyncManager: Remote status received:', status);
       setRemoteStatus(status);
     } catch (error) {
@@ -100,6 +101,7 @@ const SyncManager = ({ userData, onSuccess, onCancel }) => {
   // ✅ Определяем статус на основе реальных данных из API, а не userData
   const hasRemoteSync = remoteStatus.hasRemoteAccount && remoteStatus.tokenValid;
   const isLocalUser = !hasRemoteSync;
+  const needsRelogin = remoteStatus.hasRemoteAccount && !remoteStatus.tokenValid;
 
   // ✅ ДОБАВЛЯЕМ: функция для показа предупреждений
   const showWarning = (message) => {
@@ -200,7 +202,25 @@ const SyncManager = ({ userData, onSuccess, onCancel }) => {
               </div>
 
               <div className="sync-options">
-                {isLocalUser && remoteStatus.remoteServerAvailable && (
+                {/* Показываем Cloud Login если токен истёк */}
+                {needsRelogin && remoteStatus.remoteServerAvailable && (
+                  <button 
+                    className="sync-option-button setup-option"
+                    onClick={() => setActiveView('cloud-login')}
+                    style={{ borderColor: 'var(--color-warning)' }}
+                  >
+                    <div className="option-icon">
+                      <AlertCircle size={32} style={{ color: 'var(--color-warning)' }} />
+                    </div>
+                    <div className="option-content">
+                      <h4>Cloud Login</h4>
+                      <p>Your session expired. Re-authenticate to continue syncing</p>
+                      <span className="option-badge" style={{ background: 'var(--color-warning)', color: '#000' }}>Session Expired</span>
+                    </div>
+                  </button>
+                )}
+
+                {isLocalUser && remoteStatus.remoteServerAvailable && !needsRelogin && (
                   <button 
                     className="sync-option-button setup-option"
                     onClick={() => setActiveView('sync')}
@@ -283,7 +303,226 @@ const SyncManager = ({ userData, onSuccess, onCancel }) => {
           onCancel={() => setActiveView('menu')}
         />
       )}
+
+      {activeView === 'cloud-login' && (
+        <CloudLoginForm
+          userData={userData}
+          onSuccess={(result) => {
+            onSuccess({
+              type: 'cloud_login',
+              remoteToken: result.token,
+              remoteId: result.userId,
+              ...result
+            });
+          }}
+          onCancel={() => setActiveView('menu')}
+        />
+      )}
     </>
+  );
+};
+
+// ✅ Компонент для Cloud Login (переавторизации)
+const CloudLoginForm = ({ userData, onSuccess, onCancel }) => {
+  const [email, setEmail] = useState(userData?.email || '');
+  const [username, setUsername] = useState(userData?.username || '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [message, setMessage] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !username.trim()) {
+      setError('Email и username обязательны');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await remoteService.cloudLogin({ email: email.trim(), username: username.trim() });
+      
+      if (result.requiresOTP) {
+        setOtpStep(true);
+        setMessage('OTP код отправлен на ваш email. Проверьте почту.');
+      } else if (result.success) {
+        onSuccess(result);
+      } else {
+        setError(result.error || 'Ошибка входа');
+      }
+    } catch (err) {
+      setError(err.message || 'Не удалось выполнить вход');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOTPVerify = async (e) => {
+    e.preventDefault();
+    if (!otpCode.trim()) {
+      setError('Введите OTP код');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await remoteService.verifyCloudOTP({ otpCode: otpCode.trim(), username: username.trim() });
+      
+      if (result.success) {
+        // Сохраняем токен
+        localStorage.setItem('remoteToken', result.token);
+        localStorage.setItem('remoteId', result.userId);
+        onSuccess(result);
+      } else {
+        setError(result.error || 'Неверный OTP код');
+      }
+    } catch (err) {
+      setError(err.message || 'Ошибка верификации OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="sync-manager-overlay">
+      <div className="sync-manager-modal">
+        <div className="sync-manager-header">
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+            <Cloud size={24} />
+            Cloud Login
+          </h2>
+          <button className="close-button" onClick={onCancel}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="sync-manager-content">
+          {error && (
+            <div className="error-message" style={{ 
+              padding: 'var(--spacing-md)', 
+              background: 'var(--color-danger-bg)', 
+              color: 'var(--color-danger)',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: 'var(--spacing-md)'
+            }}>
+              <AlertCircle size={16} style={{ marginRight: '8px' }} />
+              {error}
+            </div>
+          )}
+
+          {message && (
+            <div style={{ 
+              padding: 'var(--spacing-md)', 
+              background: 'var(--color-success-bg)', 
+              color: 'var(--color-success)',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: 'var(--spacing-md)'
+            }}>
+              <CheckCircle size={16} style={{ marginRight: '8px' }} />
+              {message}
+            </div>
+          )}
+
+          {!otpStep ? (
+            <form onSubmit={handleSubmit}>
+              <p style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
+                Ваша сессия облака истекла. Введите данные для повторного входа.
+              </p>
+              
+              <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                <label style={{ display: 'block', marginBottom: '4px' }}>Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                <label style={{ display: 'block', marginBottom: '4px' }}>Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="username"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}
+                  required
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={loading}
+                style={{ 
+                  width: '100%', 
+                  padding: '14px', 
+                  background: 'var(--color-primary)', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '8px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.7 : 1
+                }}
+              >
+                {loading ? 'Отправка...' : 'Отправить OTP код'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleOTPVerify}>
+              <p style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
+                Введите OTP код, отправленный на <strong>{email}</strong>
+              </p>
+              
+              <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                <label style={{ display: 'block', marginBottom: '4px' }}>OTP Код</label>
+                <input
+                  type="text"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  placeholder="123456"
+                  maxLength={6}
+                  style={{ 
+                    width: '100%', 
+                    padding: '16px', 
+                    borderRadius: '8px', 
+                    border: '1px solid var(--border-color)',
+                    fontSize: '24px',
+                    textAlign: 'center',
+                    letterSpacing: '8px'
+                  }}
+                  required
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={loading}
+                style={{ 
+                  width: '100%', 
+                  padding: '14px', 
+                  background: 'var(--color-success)', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '8px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.7 : 1
+                }}
+              >
+                {loading ? 'Проверка...' : 'Войти'}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

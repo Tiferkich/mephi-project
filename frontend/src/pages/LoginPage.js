@@ -21,21 +21,16 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
     setError('');
 
     try {
-      // Сначала авторизуемся на сервере без передачи мастер-пароля
       const response = await authService.login(masterPassword);
       
-      // Затем безопасно разблокируем хранилище в main процессе
       await secureService.unlock(masterPassword, response.username || 'default-salt');
       
-      // Передаем только безопасные данные (БЕЗ мастер-пароля)
       onLoginSuccess({
         username: response.username,
         userId: response.userId,
         token: response.token
-        // ❌ masterPassword НЕ передаем!
       });
       
-      // Очищаем мастер-пароль из памяти
       setMasterPassword('');
       
     } catch (err) {

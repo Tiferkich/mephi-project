@@ -427,6 +427,77 @@ class RemoteService {
     }
   }
 
+  // ✅ Cloud Login - повторная авторизация когда токен истёк
+  async cloudLogin({ email, username }) {
+    try {
+      const response = await fetch(`${REMOTE_PROXY_URL}/auth/cloud-login`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ email, username })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Cloud login failed');
+      }
+
+      const result = await response.json();
+      
+      return {
+        success: true,
+        requiresOTP: result.requiresOTP || true,
+        sessionId: result.sessionId,
+        message: result.message || 'OTP sent to email'
+      };
+    } catch (error) {
+      console.error('❌ Cloud login failed:', error);
+      return { 
+        success: false, 
+        error: error.message 
+      };
+    }
+  }
+
+  // ✅ Верификация OTP для Cloud Login
+  async verifyCloudOTP({ otpCode, username }) {
+    try {
+      const response = await fetch(`${REMOTE_PROXY_URL}/auth/verify-cloud-otp`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ otpCode, username })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'OTP verification failed');
+      }
+
+      const result = await response.json();
+      
+      if (result.token) {
+        this.remoteToken = result.token;
+        this.remoteId = result.userId;
+        localStorage.setItem('remoteToken', this.remoteToken);
+        localStorage.setItem('remoteId', this.remoteId);
+      }
+
+      return {
+        success: true,
+        token: result.token,
+        userId: result.userId,
+        username: result.username,
+        email: result.email,
+        message: 'Cloud login successful'
+      };
+    } catch (error) {
+      console.error('❌ Cloud OTP verification failed:', error);
+      return { 
+        success: false, 
+        error: error.message 
+      };
+    }
+  }
+
   // ✅ Отключение от удаленного сервера
   logout() {
     this.remoteToken = null;

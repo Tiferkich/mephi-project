@@ -18,6 +18,8 @@ public interface PasswordEntryRepository extends JpaRepository<PasswordEntry, Lo
     
     List<PasswordEntry> findByUserOrderByUpdatedAtDesc(User user);
     
+    List<PasswordEntry> findByUserAndWidgetIdOrderByUpdatedAtDesc(User user, String widgetId);
+    
     Optional<PasswordEntry> findByIdAndUser(Long id, User user);
     
     Optional<PasswordEntry> findByRemoteIdAndUser(String remoteId, User user);

@@ -3,17 +3,24 @@ package com.mephi.ManagmentLocalServer.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.mephi.ManagmentLocalServer.service.FileService;
 import com.mephi.ManagmentLocalServer.service.RemoteProxyService;
 import com.mephi.ManagmentLocalServer.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Map;
@@ -21,6 +28,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/remote-proxy")
 @RequiredArgsConstructor
+@Slf4j
 public class RemoteProxyController {
 
     @Value("${remote.server.url:http://localhost:8080}")
@@ -30,9 +38,137 @@ public class RemoteProxyController {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final RemoteProxyService remoteProxyService;
     private final UserService userService;
+    private final FileService fileService;
 
     /**
-     * Прокси для всех запросов к удаленному серверу
+     * Специальный прокси для загрузки файлов на Remote Server
+     * Обрабатывает multipart/form-data отдельно от generic прокси
+     * Remote token берётся из БД текущего пользователя
+     */
+    @PostMapping(value = "/files/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> proxyFileUpload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("encryptedName") String encryptedName,
+            @RequestParam("encryptedMimeType") String encryptedMimeType,
+            @RequestParam("checksum") String checksum,
+            @RequestParam("originalSize") Long originalSize,
+            @RequestParam(value = "widgetId", required = false) String widgetId) {
+        
+        log.info("📁 FILE PROXY: Uploading file to remote server");
+        
+        // Получаем remote token из БД текущего пользователя
+        String remoteToken;
+        try {
+            var currentUser = userService.getCurrentUser();
+            remoteToken = currentUser.getRemoteToken();
+            log.info("📁 FILE PROXY: Got remote token from DB for user: {}", currentUser.getUsername());
+        } catch (Exception e) {
+            log.error("📁 FILE PROXY: Failed to get current user: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "User not authenticated"));
+        }
+        
+        if (remoteToken == null || remoteToken.isEmpty()) {
+            log.error("📁 FILE PROXY: User has no remote token! Cloud sync not configured.");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "Cloud sync not configured. Please setup cloud sync first."));
+        }
+        
+        log.info("📁 Remote Token: Present ({} chars)", remoteToken.length());
+        
+        try {
+            String targetUrl = remoteServerUrl + "/api/files/upload";
+            log.info("📁 FILE PROXY: Target URL: {}", targetUrl);
+            
+            // Подготавливаем multipart запрос
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.set("Authorization", "Bearer " + remoteToken);
+            
+            // Создаем multipart body
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            
+            // Добавляем файл как ByteArrayResource
+            ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return "encrypted_file";
+                }
+            };
+            body.add("file", fileResource);
+            body.add("encryptedName", encryptedName);
+            body.add("encryptedMimeType", encryptedMimeType);
+            body.add("checksum", checksum);
+            body.add("originalSize", originalSize.toString());
+            
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+            
+            log.info("📁 FILE PROXY: Sending request to remote server...");
+            
+            ResponseEntity<String> response = restTemplate.exchange(
+                targetUrl,
+                HttpMethod.POST,
+                requestEntity,
+                String.class
+            );
+            
+            log.info("📁 FILE PROXY: Response status: {}", response.getStatusCode());
+            log.info("📁 FILE PROXY: Response body: {}", response.getBody());
+            
+            // После успешной загрузки в облако, сохраняем локальную запись
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                try {
+                    JsonNode remoteResponse = objectMapper.readTree(response.getBody());
+                    Long remoteFileId = remoteResponse.has("id") ? remoteResponse.get("id").asLong() : null;
+                    String scanStatus = remoteResponse.has("scanStatus") ? remoteResponse.get("scanStatus").asText() : "PENDING";
+                    
+                    if (remoteFileId != null) {
+                        var currentUser = userService.getCurrentUser();
+                        // Сохраняем локальную запись с ссылкой на облачный файл
+                        fileService.createCloudFileEntry(
+                            currentUser.getId(),
+                            encryptedName,
+                            encryptedMimeType,
+                            checksum,
+                            originalSize,
+                            file.getSize(),
+                            remoteFileId,
+                            scanStatus,
+                            widgetId
+                        );
+                        log.info("📁 FILE PROXY: Local entry created for cloud file, remoteId={}", remoteFileId);
+                    }
+                } catch (Exception e) {
+                    log.warn("📁 FILE PROXY: Failed to create local entry for cloud file: {}", e.getMessage());
+                    // Не прерываем - файл уже в облаке
+                }
+            }
+            
+            return ResponseEntity
+                .status(response.getStatusCode())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(response.getBody());
+                
+        } catch (HttpClientErrorException | HttpServerErrorException e) {
+            log.error("📁 FILE PROXY ERROR: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return ResponseEntity
+                .status(e.getStatusCode())
+                .body(e.getResponseBodyAsString());
+        } catch (IOException e) {
+            log.error("📁 FILE PROXY IO ERROR: {}", e.getMessage());
+            return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to read file: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("📁 FILE PROXY EXCEPTION: {}", e.getMessage(), e);
+            return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to upload file to cloud: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Прокси для всех запросов к удаленному серверу (кроме файлов)
      */
     @RequestMapping(value = "/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.PATCH, RequestMethod.OPTIONS})
     public ResponseEntity<?> proxyToRemoteServer(
@@ -208,6 +344,7 @@ public class RemoteProxyController {
             remoteProxyService.logProxyResponse(method, path, response.getStatusCode().value(), duration);
             
             // ✅ АВТОМАТИЧЕСКОЕ СОХРАНЕНИЕ РЕЗУЛЬТАТОВ VERIFY-OTP
+            System.out.println("🔄 🔍 Checking if need to save token: path=" + path + ", method=" + method + ", status=" + response.getStatusCode());
             if (path.equals("/auth/verify-otp") && "POST".equals(method) && response.getStatusCode().is2xxSuccessful()) {
                 try {
                     System.out.println("🔄 🔧 ОБРАБАТЫВАЕМ УСПЕШНУЮ ВЕРИФИКАЦИЮ OTP 🔧");
@@ -238,13 +375,25 @@ public class RemoteProxyController {
                 }
             }
             
-            // ✅ ВОЗВРАЩАЕМ ОТВЕТ УДАЛЕННОГО СЕРВЕРА КАК ЕСТЬ (CORS заголовки уже есть)
+            // ✅ ВОЗВРАЩАЕМ ОТВЕТ УДАЛЕННОГО СЕРВЕРА БЕЗ CORS заголовков (SimpleCorsFilter добавит свои)
             System.out.println("🔄 ✅ ВОЗВРАЩАЕМ ОТВЕТ ФРОНТЕНДУ:");
             System.out.println("🔄   Status: " + response.getStatusCode());
             System.out.println("🔄   Headers from remote: " + response.getHeaders().keySet());
             System.out.println("🔄   Body: " + (response.getBody() != null ? response.getBody().substring(0, Math.min(response.getBody().length(), 100)) + "..." : "null"));
             
-            return response;
+            // Фильтруем CORS заголовки из ответа remote сервера (SimpleCorsFilter добавит свои)
+            HttpHeaders filteredHeaders = new HttpHeaders();
+            response.getHeaders().forEach((name, values) -> {
+                String lowerName = name.toLowerCase();
+                if (!lowerName.startsWith("access-control-")) {
+                    filteredHeaders.addAll(name, values);
+                }
+            });
+            
+            return ResponseEntity
+                .status(response.getStatusCode())
+                .headers(filteredHeaders)
+                .body(response.getBody());
                 
         } catch (HttpClientErrorException | HttpServerErrorException e) {
             long duration = System.currentTimeMillis() - startTime;

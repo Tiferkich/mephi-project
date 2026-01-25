@@ -9,12 +9,12 @@ spring:
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.community.dialect.SQLiteDialect
         hbm2ddl:
-          auto: create-drop
+          auto: update
         globally_quoted_identifiers: true
     show-sql: true
 
@@ -58,14 +58,15 @@ management:
     health:
       show-details: always
 
----
-# Docker profile configuration
-spring:
-  config:
-    activate:
-      on-profile: docker
-  datasource:
-    url: jdbc:sqlite:/app/data/local_database.db 
+# File Upload Configuration
+spring.servlet.multipart:
+  max-file-size: 50MB
+  max-request-size: 55MB
+
+# File Storage Configuration
+file:
+  storage:
+    path: ./data/files
 
 ---
 # Docker profile configuration
@@ -74,4 +75,9 @@ spring:
     activate:
       on-profile: docker
   datasource:
-    url: jdbc:sqlite:/app/data/local_database.db 
+    url: jdbc:sqlite:/app/data/local_database.db
+
+# File storage path for Docker
+file:
+  storage:
+    path: /app/data/files 

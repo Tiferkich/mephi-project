@@ -19,28 +19,17 @@ public class SimpleCorsFilter implements Filter {
 
         String path = request.getRequestURI();
         
-        // ✅ НЕ добавляем CORS заголовки для remote-proxy эндпоинтов
-        // Они получат CORS заголовки от удаленного сервера
-        if (!path.startsWith("/remote-proxy")) {
+        // ✅ Добавляем CORS заголовки для ВСЕХ запросов
             response.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
             response.setHeader("Access-Control-Allow-Credentials", "true");
             response.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE, PUT, PATCH");
             response.setHeader("Access-Control-Max-Age", "3600");
-            response.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, X-Requested-With, Authorization");
+        response.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, X-Requested-With, Authorization, X-Remote-Token");
+            // Expose custom headers for file downloads
+            response.setHeader("Access-Control-Expose-Headers", "X-Encrypted-Name, X-Encrypted-MimeType, X-Original-Size, X-Checksum, X-Data-Iv, X-Data-Salt, Content-Disposition");
 
+        // ✅ Обрабатываем OPTIONS запросы (CORS preflight)
             if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-                response.setStatus(HttpServletResponse.SC_OK);
-                return;
-            }
-        }
-        
-        // ✅ Обрабатываем OPTIONS для remote-proxy (CORS preflight)
-        if (path.startsWith("/remote-proxy") && "OPTIONS".equalsIgnoreCase(request.getMethod())) {
-            response.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
-            response.setHeader("Access-Control-Allow-Credentials", "true");
-            response.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE, PUT, PATCH");
-            response.setHeader("Access-Control-Max-Age", "3600");
-            response.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, X-Requested-With, Authorization");
             response.setStatus(HttpServletResponse.SC_OK);
             return;
         }

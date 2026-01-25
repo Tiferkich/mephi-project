@@ -1,25 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Shield, 
-  Key, 
-  FileText, 
-  Cloud, 
-  CloudOff, 
-  RefreshCw, 
-  Settings,
-  LogOut,
-  Plus,
-  Lock,
-  Unlock,
-  CheckCircle,
-  AlertCircle,
-  Smartphone,
-  WifiOff,
-  Zap
-} from 'lucide-react';
+import 'boxicons/css/boxicons.min.css';
 import { remoteService, syncService, authService, passwordService, noteService } from '../services/authService';
 import { secureService } from '../services/secureService';
+import widgetService from '../services/widgetService';
 import PasswordForm from '../components/PasswordForm';
 import NoteForm from '../components/NoteForm';
 import PasswordList from '../components/PasswordList';
@@ -27,6 +11,10 @@ import NoteList from '../components/NoteList';
 import ToastContainer from '../components/ToastContainer';
 import PasswordPromptModal from '../components/PasswordPromptModal';
 import SyncManager from '../components/SyncManager';
+import FileManager from '../components/FileManager';
+import Widget from '../components/Widget';
+import WidgetGrid from '../components/WidgetGrid';
+import CreateWidgetModal from '../components/CreateWidgetModal';
 import { useToast } from '../hooks/useToast';
 
 const DashboardPage = ({ user, onLogout }) => {
@@ -62,12 +50,22 @@ const DashboardPage = ({ user, onLogout }) => {
   // ✅ ДОБАВЛЯЕМ: Состояние для расширенных опций синхронизации
   const [showAdvancedSync, setShowAdvancedSync] = useState(false);
 
+  // File Manager state
+  const [showFileManager, setShowFileManager] = useState(false);
+  const [masterPassword, setMasterPassword] = useState(null);
+
+  // Widget system state
+  const [widgets, setWidgets] = useState([]);
+  const [showCreateWidgetModal, setShowCreateWidgetModal] = useState(false);
+
   // Toast system
   const { toasts, showSuccess, showError, showWarning, showInfo, hideToast } = useToast();
 
   // Load data on component mount
   useEffect(() => {
     loadInitialData();
+    // Load widgets configuration
+    setWidgets(widgetService.getWidgets());
   }, []);
 
   const loadInitialData = async () => {
@@ -368,10 +366,21 @@ const DashboardPage = ({ user, onLogout }) => {
     onLogout();
   };
 
+  // Current widget for adding items
+  const [currentWidgetId, setCurrentWidgetId] = useState(null);
+
   // Password handlers
   const handleAddPassword = () => {
     if (isLocked) return;
     setEditingPassword(null);
+    setCurrentWidgetId(null);
+    setShowPasswordForm(true);
+  };
+
+  const handleAddPasswordToWidget = (widgetId) => {
+    if (isLocked) return;
+    setEditingPassword(null);
+    setCurrentWidgetId(widgetId);
     setShowPasswordForm(true);
   };
 
@@ -420,6 +429,14 @@ const DashboardPage = ({ user, onLogout }) => {
   const handleAddNote = () => {
     if (isLocked) return;
     setEditingNote(null);
+    setCurrentWidgetId(null);
+    setShowNoteForm(true);
+  };
+
+  const handleAddNoteToWidget = (widgetId) => {
+    if (isLocked) return;
+    setEditingNote(null);
+    setCurrentWidgetId(widgetId);
     setShowNoteForm(true);
   };
 
@@ -477,11 +494,13 @@ const DashboardPage = ({ user, onLogout }) => {
         // Очищаем только UI данные
         setPasswords([]);
         setNotes([]);
+        setMasterPassword(null); // Очищаем мастер-пароль
         setIsLocked(true);
         
         // Закрываем открытые модальные окна
         setShowPasswordForm(false);
         setShowNoteForm(false);
+        setShowFileManager(false);
         setEditingPassword(null);
         setEditingNote(null);
         
@@ -501,6 +520,9 @@ const DashboardPage = ({ user, onLogout }) => {
       // Разблокируем хранилище в main процессе
       await secureService.unlock(password, user.username || 'default-salt');
       
+      // Сохраняем мастер-пароль для FileManager (используется для ГОСТ шифрования файлов)
+      setMasterPassword(password);
+      
       // Загружаем и расшифровываем данные в main процессе
       await Promise.all([loadPasswords(), loadNotes()]);
       
@@ -516,6 +538,98 @@ const DashboardPage = ({ user, onLogout }) => {
   // Обработчик отмены ввода пароля
   const handlePasswordCancel = () => {
     setShowPasswordPrompt(false);
+  };
+
+  // Widget handlers
+  const handleCreateWidget = (widgetData) => {
+    const newWidget = widgetService.createWidget(widgetData.type, widgetData.title);
+    setWidgets(widgetService.getWidgets());
+    showSuccess(`Widget "${widgetData.title}" created!`);
+  };
+
+  const handleDeleteWidget = (widgetId) => {
+    if (!window.confirm('Are you sure you want to delete this widget?')) return;
+    widgetService.deleteWidget(widgetId);
+    setWidgets(widgetService.getWidgets());
+    showInfo('Widget deleted');
+  };
+
+  const handleWidgetTitleChange = (widgetId, newTitle) => {
+    widgetService.updateWidget(widgetId, { title: newTitle });
+    setWidgets(widgetService.getWidgets());
+  };
+
+  const handleReorderWidgets = (newOrder) => {
+    widgetService.reorderWidgets(newOrder);
+    setWidgets(newOrder);
+  };
+
+  const handleToggleWidgetCollapse = (widgetId) => {
+    widgetService.toggleWidgetCollapse(widgetId);
+    setWidgets(widgetService.getWidgets());
+  };
+
+  const handleWidgetResize = (widgetId, width, height) => {
+    widgetService.updateWidgetSize(widgetId, width, height);
+    setWidgets(widgetService.getWidgets());
+  };
+
+  // Render widget content based on type
+  const renderWidgetContent = (widget) => {
+    switch (widget.type) {
+      case 'passwords':
+        return (
+          <>
+            <PasswordList
+              passwords={passwords.filter(p => !p.widgetId || p.widgetId === widget.id)}
+              onEdit={handleEditPassword}
+              onDelete={handleDeletePassword}
+              loading={passwordsLoading}
+              compact
+            />
+            <button 
+              className="widget__add-btn"
+              onClick={() => handleAddPasswordToWidget(widget.id)}
+              disabled={isLocked}
+            >
+              <i className='bx bx-plus'></i>
+              Add Password
+            </button>
+          </>
+        );
+      case 'notes':
+        return (
+          <>
+            <NoteList
+              notes={notes.filter(n => !n.widgetId || n.widgetId === widget.id)}
+              onEdit={handleEditNote}
+              onDelete={handleDeleteNote}
+              loading={notesLoading}
+              compact
+            />
+            <button 
+              className="widget__add-btn"
+              onClick={() => handleAddNoteToWidget(widget.id)}
+              disabled={isLocked}
+            >
+              <i className='bx bx-plus'></i>
+              Add Note
+            </button>
+          </>
+        );
+      case 'files':
+        return (
+          <FileManager 
+            widgetId={widget.id}
+            isUnlocked={!isLocked}
+            masterPassword={masterPassword}
+            isOnline={remoteStatus.hasRemoteAccount && remoteStatus.tokenValid}
+            compact
+          />
+        );
+      default:
+        return <div className="widget__empty">Unknown widget type</div>;
+    }
   };
 
   const handleSyncSuccess = (result) => {
@@ -623,10 +737,10 @@ const DashboardPage = ({ user, onLogout }) => {
     return 'Sync Now';
   };
 
-  const getSyncButtonIcon = () => {
-    if (!remoteStatus.remoteServerAvailable) return CloudOff;
-    if (!remoteStatus.hasRemoteAccount || !remoteStatus.tokenValid) return Cloud;
-    return RefreshCw;
+  const getSyncIconClass = () => {
+    if (!remoteStatus.remoteServerAvailable) return 'bx-cloud-off';
+    if (!remoteStatus.hasRemoteAccount || !remoteStatus.tokenValid) return 'bx-cloud';
+    return 'bx-refresh';
   };
 
   if (loading) {
@@ -667,13 +781,11 @@ const DashboardPage = ({ user, onLogout }) => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
-          <Shield 
-            size={32} 
-            style={{ 
-              color: 'var(--color-success)',
-              filter: 'drop-shadow(0 0 10px rgba(34, 197, 94, 0.3))'
-            }}
-          />
+          <i className='bx bxs-shield-alt-2' style={{ 
+            fontSize: '32px',
+            color: 'var(--color-success)',
+            filter: 'drop-shadow(0 0 10px rgba(34, 197, 94, 0.3))'
+          }}></i>
           <div>
             <h1 style={{
               fontSize: 'var(--font-size-xl)',
@@ -716,7 +828,7 @@ const DashboardPage = ({ user, onLogout }) => {
             }}
             title={isLocked ? "Unlock vault to decrypt data" : "Lock vault and clear data from memory"}
           >
-            {isLocked ? <Lock size={16} /> : <Unlock size={16} />}
+            <i className={`bx ${isLocked ? 'bx-lock-alt' : 'bx-lock-open-alt'}`} style={{ fontSize: '16px' }}></i>
             {isLocked ? 'Unlock Vault' : 'Lock Vault'}
           </button>
           
@@ -742,7 +854,7 @@ const DashboardPage = ({ user, onLogout }) => {
               e.target.style.color = 'var(--text-secondary)';
             }}
           >
-            <Settings size={16} />
+            <i className='bx bx-cog' style={{ fontSize: '16px' }}></i>
             Settings
           </button>
           
@@ -769,7 +881,7 @@ const DashboardPage = ({ user, onLogout }) => {
               e.target.style.color = 'var(--color-danger)';
             }}
           >
-            <LogOut size={16} />
+            <i className='bx bx-log-out' style={{ fontSize: '16px' }}></i>
             Logout
           </button>
         </div>
@@ -796,7 +908,7 @@ const DashboardPage = ({ user, onLogout }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-            <Key style={{ color: 'var(--color-info)', marginRight: 'var(--spacing-sm)' }} />
+            <i className='bx bx-key' style={{ color: 'var(--color-info)', marginRight: 'var(--spacing-sm)', fontSize: '24px' }}></i>
             <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Passwords</h3>
           </div>
           <p style={{ 
@@ -830,7 +942,7 @@ const DashboardPage = ({ user, onLogout }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-            <FileText style={{ color: 'var(--color-warning)', marginRight: 'var(--spacing-sm)' }} />
+            <i className='bx bx-file' style={{ color: 'var(--color-warning)', marginRight: 'var(--spacing-sm)', fontSize: '24px' }}></i>
             <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Notes</h3>
           </div>
           <p style={{ 
@@ -864,12 +976,11 @@ const DashboardPage = ({ user, onLogout }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-            {React.createElement(getSyncButtonIcon(), { 
-              style: { 
-                color: remoteStatus.remoteServerAvailable ? 'var(--color-success)' : 'var(--text-secondary)', 
-                marginRight: 'var(--spacing-sm)' 
-              } 
-            })}
+            <i className={`bx ${getSyncIconClass()}`} style={{ 
+              color: remoteStatus.remoteServerAvailable ? 'var(--color-success)' : 'var(--text-secondary)', 
+              marginRight: 'var(--spacing-sm)',
+              fontSize: '24px'
+            }}></i>
             <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Remote Sync</h3>
           </div>
           
@@ -892,14 +1003,14 @@ const DashboardPage = ({ user, onLogout }) => {
                 remoteStatus.hasRemoteAccount ? (
                   remoteStatus.tokenValid ? (
                     <>
-                      <CheckCircle size={14} style={{ color: 'var(--color-success)' }} />
+                      <i className='bx bx-check-circle' style={{ color: 'var(--color-success)', fontSize: '14px' }}></i>
                       <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>
                         Connected
                       </span>
                     </>
                   ) : (
                     <>
-                      <AlertCircle size={14} style={{ color: 'var(--color-warning)' }} />
+                      <i className='bx bx-error-circle' style={{ color: 'var(--color-warning)', fontSize: '14px' }}></i>
                       <span style={{ color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)' }}>
                         Disconnected
                       </span>
@@ -907,7 +1018,7 @@ const DashboardPage = ({ user, onLogout }) => {
                   )
                 ) : (
                   <>
-                    <Smartphone size={14} style={{ color: 'var(--color-info)' }} />
+                    <i className='bx bx-devices' style={{ color: 'var(--color-info)', fontSize: '14px' }}></i>
                     <span style={{ color: 'var(--color-info)', fontSize: 'var(--font-size-sm)' }}>
                       Ready to connect
                     </span>
@@ -915,7 +1026,7 @@ const DashboardPage = ({ user, onLogout }) => {
                 )
               ) : (
                 <>
-                  <WifiOff size={14} style={{ color: 'var(--color-danger)' }} />
+                  <i className='bx bx-wifi-off' style={{ color: 'var(--color-danger)', fontSize: '14px' }}></i>
                   <span style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
                     Server offline
                   </span>
@@ -934,14 +1045,14 @@ const DashboardPage = ({ user, onLogout }) => {
               }}>
                 {remoteStatus.unsyncedNotes > 0 || remoteStatus.unsyncedPasswords > 0 ? (
                   <>
-                    <AlertCircle size={12} style={{ color: 'var(--color-warning)' }} />
+                    <i className='bx bx-error-circle' style={{ color: 'var(--color-warning)', fontSize: '12px' }}></i>
                     <span>
                       {remoteStatus.unsyncedNotes || 0} notes, {remoteStatus.unsyncedPasswords || 0} passwords unsynced
                     </span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle size={12} style={{ color: 'var(--color-success)' }} />
+                    <i className='bx bx-check-circle' style={{ color: 'var(--color-success)', fontSize: '12px' }}></i>
                     <span style={{ color: 'var(--color-success)' }}>
                       All data synchronized
                     </span>
@@ -977,13 +1088,12 @@ const DashboardPage = ({ user, onLogout }) => {
             }}
           >
             {syncLoading && (
-              <motion.div
+              <motion.i
+                className='bx bx-refresh'
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                style={{ display: 'flex', alignItems: 'center' }}
-              >
-                <RefreshCw size={14} />
-              </motion.div>
+                style={{ display: 'flex', alignItems: 'center', fontSize: '14px' }}
+              />
             )}
             {getSyncButtonText()}
           </button>
@@ -1025,7 +1135,7 @@ const DashboardPage = ({ user, onLogout }) => {
               }}
               title="Force sync will overwrite conflicts with cloud data"
             >
-              <Zap size={12} />
+              <i className='bx bx-bolt' style={{ fontSize: '12px' }}></i>
               Force Sync
             </button>
           )}
@@ -1057,274 +1167,37 @@ const DashboardPage = ({ user, onLogout }) => {
               e.target.style.background = 'var(--bg-tertiary)';
             }}
           >
-            <Cloud size={14} />
+            <i className='bx bx-cloud' style={{ fontSize: '14px' }}></i>
             Cloud Sync Manager
           </button>
-          
-          {/* Advanced Sync - collapsed by default, cleaner design */}
-          {remoteStatus.hasRemoteAccount && remoteStatus.tokenValid && (
-            <div style={{ marginTop: 'var(--spacing-sm)' }}>
-              <button
-                onClick={() => setShowAdvancedSync(!showAdvancedSync)}
-                style={{
-                  width: '100%',
-                  padding: 'var(--spacing-xs) var(--spacing-sm)',
-                  background: 'none',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--border-radius-sm)',
-                  cursor: 'pointer',
-                  transition: 'all var(--transition-fast)',
-                  fontSize: 'var(--font-size-xs)',
-                  fontWeight: 'var(--font-weight-medium)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 'var(--spacing-xs)',
-                  marginBottom: showAdvancedSync ? 'var(--spacing-xs)' : 0
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.borderColor = 'var(--border-color-hover)';
-                  e.target.style.color = 'var(--text-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.borderColor = 'var(--border-color)';
-                  e.target.style.color = 'var(--text-secondary)';
-                }}
-              >
-                <Settings size={12} />
-                {showAdvancedSync ? 'Hide Advanced' : 'Advanced Sync'}
-              </button>
-              
-              {showAdvancedSync && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 'var(--spacing-xs)',
-                    marginTop: 'var(--spacing-xs)'
-                  }}
-                >
-                  <button
-                    onClick={handleSyncPasswords}
-                    disabled={syncLoading}
-                    style={{
-                      padding: 'var(--spacing-xs)',
-                      background: 'var(--color-info)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: 'var(--border-radius-sm)',
-                      cursor: syncLoading ? 'not-allowed' : 'pointer',
-                      fontSize: 'var(--font-size-xs)',
-                      fontWeight: 'var(--font-weight-medium)',
-                      opacity: syncLoading ? 0.5 : 1,
-                      transition: 'all var(--transition-fast)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '4px'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!syncLoading) {
-                        e.target.style.transform = 'translateY(-1px)';
-                        e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!syncLoading) {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = 'none';
-                      }
-                    }}
-                  >
-                    <Key size={10} />
-                    Passwords
-                  </button>
-                  
-                  <button
-                    onClick={handleSyncNotes}
-                    disabled={syncLoading}
-                    style={{
-                      padding: 'var(--spacing-xs)',
-                      background: 'var(--color-warning)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: 'var(--border-radius-sm)',
-                      cursor: syncLoading ? 'not-allowed' : 'pointer',
-                      fontSize: 'var(--font-size-xs)',
-                      fontWeight: 'var(--font-weight-medium)',
-                      opacity: syncLoading ? 0.5 : 1,
-                      transition: 'all var(--transition-fast)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '4px'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!syncLoading) {
-                        e.target.style.transform = 'translateY(-1px)';
-                        e.target.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!syncLoading) {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = 'none';
-                      }
-                    }}
-                  >
-                    <FileText size={10} />
-                    Notes
-                  </button>
-                </motion.div>
-              )}
-            </div>
-          )}
         </motion.div>
       </div>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        style={{
-          padding: 'var(--spacing-lg)',
-          background: 'var(--bg-secondary)',
-          borderRadius: 'var(--border-radius-lg)',
-          border: '1px solid var(--border-color)',
-          boxShadow: 'var(--shadow-md)',
-          marginBottom: 'var(--spacing-xl)'
-        }}
-      >
-        <h3 style={{ 
-          margin: '0 0 var(--spacing-md) 0', 
-          color: 'var(--text-primary)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--spacing-sm)'
-        }}>
-          <Plus size={20} />
-          Quick Actions
-        </h3>
-        
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 'var(--spacing-md)'
-        }}>
-          <button
-            onClick={handleAddPassword}
-            disabled={isLocked}
-            style={{
-              padding: 'var(--spacing-md)',
-              background: isLocked ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, var(--color-info) 0%, var(--color-info-hover) 100%)',
-              color: isLocked ? 'var(--text-secondary)' : 'white',
-              border: 'none',
-              borderRadius: 'var(--border-radius-md)',
-              cursor: isLocked ? 'not-allowed' : 'pointer',
-              transition: 'all var(--transition-fast)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--font-weight-medium)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 'var(--spacing-sm)',
-              opacity: isLocked ? 0.5 : 1
-            }}
-            onMouseEnter={(e) => {
-              if (!isLocked) {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 8px 25px rgba(59, 130, 246, 0.3)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isLocked) {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
-              }
-            }}
-          >
-            <Key size={16} />
-            Add Password
-          </button>
-          
-          <button
-            onClick={handleAddNote}
-            disabled={isLocked}
-            style={{
-              padding: 'var(--spacing-md)',
-              background: isLocked ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, var(--color-warning) 0%, var(--color-warning-hover) 100%)',
-              color: isLocked ? 'var(--text-secondary)' : 'white',
-              border: 'none',
-              borderRadius: 'var(--border-radius-md)',
-              cursor: isLocked ? 'not-allowed' : 'pointer',
-              transition: 'all var(--transition-fast)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--font-weight-medium)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 'var(--spacing-sm)',
-              opacity: isLocked ? 0.5 : 1
-            }}
-            onMouseEnter={(e) => {
-              if (!isLocked) {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 8px 25px rgba(245, 158, 11, 0.3)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isLocked) {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
-              }
-            }}
-          >
-            <FileText size={16} />
-            Add Note
-          </button>
-        </div>
-      </motion.div>
-
-      {/* Data Lists */}
+      {/* Widgets Section */}
       {!isLocked && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 'var(--spacing-xl)'
-        }}>
-          {/* Password List */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <PasswordList
-              passwords={passwords}
-              onEdit={handleEditPassword}
-              onDelete={handleDeletePassword}
-              loading={passwordsLoading}
-            />
-          </motion.div>
-
-          {/* Note List */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6 }}
-          >
-            <NoteList
-              notes={notes}
-              onEdit={handleEditNote}
-              onDelete={handleDeleteNote}
-              loading={notesLoading}
-            />
-          </motion.div>
-        </div>
+        <WidgetGrid
+          widgets={widgets}
+          onReorder={handleReorderWidgets}
+          onCreateWidget={() => setShowCreateWidgetModal(true)}
+        >
+          {widgets.map((widget) => (
+            <Widget
+              key={widget.id}
+              id={widget.id}
+              title={widget.title}
+              type={widget.type}
+              collapsed={widget.collapsed}
+              width={widget.width}
+              height={widget.height}
+              onTitleChange={handleWidgetTitleChange}
+              onDelete={handleDeleteWidget}
+              onToggleCollapse={() => handleToggleWidgetCollapse(widget.id)}
+              onResize={handleWidgetResize}
+            >
+              {renderWidgetContent(widget)}
+            </Widget>
+          ))}
+        </WidgetGrid>
       )}
 
       {/* Locked State Message */}
@@ -1341,7 +1214,7 @@ const DashboardPage = ({ user, onLogout }) => {
             textAlign: 'center'
           }}
         >
-          <Lock size={48} style={{ color: 'var(--color-warning)', marginBottom: 'var(--spacing-md)' }} />
+          <i className='bx bx-lock-alt' style={{ fontSize: '48px', color: 'var(--color-warning)', marginBottom: 'var(--spacing-md)', display: 'block' }}></i>
           <h3 style={{ color: 'var(--text-primary)', margin: '0 0 var(--spacing-sm) 0' }}>
             Vault is Locked
           </h3>
@@ -1392,6 +1265,13 @@ const DashboardPage = ({ user, onLogout }) => {
           onCancel={() => setShowSyncManager(false)}
         />
       )}
+
+      {/* Create Widget Modal */}
+      <CreateWidgetModal
+        isOpen={showCreateWidgetModal}
+        onClose={() => setShowCreateWidgetModal(false)}
+        onCreate={handleCreateWidget}
+      />
 
       {/* Toast Container */}
       <ToastContainer 

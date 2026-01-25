@@ -222,6 +222,10 @@ textarea {
   background-color: var(--bg-tertiary) !important;
   color: var(--text-primary) !important;
   border: 1px solid var(--border-color) !important;
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  caret-color: var(--text-primary) !important;
+  -webkit-user-modify: read-write !important;
 }
 
 input[type="text"]:focus,
