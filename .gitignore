@@ -4,4 +4,6 @@
 ./ManagmentLocalServer/target/*
 ./ManagmentServer/.mvn/*
 ./ManagmentServer/target/*
-
+./guides/*
+./guide/*
+./frontend/node_modules/*
