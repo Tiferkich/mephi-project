@@ -4,7 +4,10 @@
  * Все запросы проходят через локальный сервер
  */
 
-const LOCAL_SERVER_URL = process.env.REACT_APP_LOCAL_SERVER_URL || 'http://localhost:3001';
+const LOCAL_SERVER_URL =
+  window.electronAPI?.localServerUrl ||
+  process.env.REACT_APP_LOCAL_SERVER_URL ||
+  'http://localhost:3001';
 const REMOTE_PROXY_URL = `${LOCAL_SERVER_URL}/remote-proxy`;
 
 class RemoteService {

@@ -13,4 +13,6 @@ public interface SecureNoteRepository extends JpaRepository<SecureNote, Long> {
     List<SecureNote> findByUser(User user);
     Optional<SecureNote> findByIdAndUser(Long id, User user);
     void deleteByIdAndUser(Long id, User user);
+
+    void deleteByUser(User user);
 } 

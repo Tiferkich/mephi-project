@@ -269,8 +269,9 @@ public class RemoteProxyController {
             HttpHeaders httpHeaders = new HttpHeaders();
             
             // Определяем нужна ли аутентификация для удаленного сервера
-            boolean isPublicEndpoint = path.startsWith("/auth/");
-            boolean needsRemoteAuth = path.startsWith("/sync/") || path.startsWith("/api/");
+            // /auth/public-key (PUT) требует remote-токен — не считаем публичным
+            boolean isPublicEndpoint = path.startsWith("/auth/") && !path.equals("/auth/public-key");
+            boolean needsRemoteAuth = path.startsWith("/sync/") || path.startsWith("/api/") || path.equals("/auth/public-key");
             
             System.out.println("🔄 Is Public Endpoint: " + isPublicEndpoint);
             System.out.println("🔄 Needs Remote Auth: " + needsRemoteAuth);

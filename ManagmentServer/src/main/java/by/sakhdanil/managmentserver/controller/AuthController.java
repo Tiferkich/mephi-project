@@ -4,6 +4,7 @@ import by.sakhdanil.managmentserver.dto.auth.*;
 import by.sakhdanil.managmentserver.dto.user.JwtResponse;
 import by.sakhdanil.managmentserver.dto.user.LoginRequest;
 import by.sakhdanil.managmentserver.dto.user.RegisterRequest;
+import by.sakhdanil.managmentserver.entity.User;
 import by.sakhdanil.managmentserver.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -325,6 +327,22 @@ public class AuthController {
             "status", "UP",
             "timestamp", java.time.Instant.now().toString()
         ));
+    }
+
+    @PutMapping("/public-key")
+    @Operation(
+        summary = "Сохранить X25519 публичный ключ пользователя",
+        description = "Вызывается клиентом после разблокировки vault. Ключ используется другими пользователями для ECDH при передаче группового ключа."
+    )
+    public ResponseEntity<Map<String, Object>> updatePublicKey(
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal User user) {
+        String publicKey = body.get("publicKey");
+        if (publicKey == null || publicKey.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "publicKey is required"));
+        }
+        userService.updatePublicKey(user, publicKey);
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 
     @PostMapping("/test-email")

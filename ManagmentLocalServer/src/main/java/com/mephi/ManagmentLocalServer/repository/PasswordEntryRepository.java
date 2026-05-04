@@ -32,4 +32,6 @@ public interface PasswordEntryRepository extends JpaRepository<PasswordEntry, Lo
     
     @Query("SELECT p FROM PasswordEntry p WHERE p.user = :user AND p.updatedAt > :since")
     List<PasswordEntry> findByUserAndUpdatedAtAfter(@Param("user") User user, @Param("since") Instant since);
+
+    void deleteByUser(User user);
 } 

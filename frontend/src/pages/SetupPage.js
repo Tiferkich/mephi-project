@@ -1,12 +1,31 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, User, Key, Check, Eye, EyeOff, AlertTriangle, Cloud, Smartphone } from 'lucide-react';
+import { Shield, User, Key, Check, Eye, EyeOff, AlertTriangle, Cloud, Download } from 'lucide-react';
 import './SetupPage.css';
 import { authService } from '../services/authService';
+import { restoreFromBackup } from '../services/backupService';
+import { secureService } from '../services/secureService';
+import { userCryptoSalt } from '../utils/userCrypto';
 import { generateUserRegistrationData, validatePasswordStrength } from '../utils/crypto';
+import { useDeviceSecurity } from '../hooks/useDeviceSecurity';
+import { SecurityStatusBadge } from '../components/SecurityStatusBadge';
+import { getLastSnapshot, getLastCheckId, runFullCheck, storeCheckResult } from '../services/securityService';
+import { publishPublicKey } from '../services/groupService';
 
-const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
-  const [setupMode, setSetupMode] = useState(''); // 'new', 'cloud', 'transfer'
+async function tryPublishPublicKey(masterPassword, userId) {
+  try {
+    const result = await window.electronAPI.crypto.deriveX25519Keypair(masterPassword, userId);
+    if (result.success) {
+      await publishPublicKey(result.pubKeyBase64);
+    }
+  } catch (e) {
+    console.warn('[pubkey] failed to publish X25519 public key:', e.message);
+  }
+}
+
+const SetupPage = ({ onSetupComplete, isFirstTime, serverError, onSecurityBlocked }) => {
+  const { status, snapshot, denyReason, policy, recheck, lastCheckId } = useDeviceSecurity({ autoRun: true });
+  const [setupMode, setSetupMode] = useState(''); // 'new', 'cloud', 'restore'
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     username: '',
@@ -17,7 +36,7 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
     cloudUsername: '',
     cloudPassword: '',
     otpCode: '',
-    transferToken: ''
+    restorePassword: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,10 +58,10 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
         { id: 3, title: 'OTP Verify', icon: Key },
         { id: 4, title: 'Complete', icon: Check }
       ];
-    } else if (setupMode === 'transfer') {
+    } else if (setupMode === 'restore') {
       return [
         { id: 1, title: 'Setup Mode', icon: Shield },
-        { id: 2, title: 'Transfer Token', icon: Smartphone },
+        { id: 2, title: 'Restore Backup', icon: Download },
         { id: 3, title: 'Complete', icon: Check }
       ];
     } else {
@@ -158,36 +177,55 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
     }
   };
 
-  const handleTransferTokenLogin = async () => {
-    if (!formData.transferToken.trim()) {
-      setError('Please enter your transfer token');
+  const handleRestoreFromBackup = async () => {
+    if (!formData.restorePassword.trim()) {
+      setError('Please enter your master password');
       return;
     }
 
     setLoading(true);
     setError('');
-    
+
     try {
-      console.log('🔄 Starting transfer token usage...');
-      const response = await authService.useTransferToken(formData.transferToken.trim());
-      
-      console.log('✅ Transfer successful:', response);
-      
-      // Успешный перенос
+      const response = await restoreFromBackup(formData.restorePassword);
+      if (!response) {
+        // canceled by user
+        setLoading(false);
+        return;
+      }
+
+      // Immediately unlock the vault so the dashboard loads data without
+      // asking the user to re-enter the password. The same password that
+      // decrypted the .vault file also derives the vault crypto key
+      // (PBKDF2 with userId as salt, both of which are now restored).
+      const unlockPassword = response.restoredMasterPassword || formData.restorePassword;
+      try {
+        await secureService.unlock(unlockPassword, userCryptoSalt({
+          userId: response.userId,
+          username: response.username,
+        }));
+      } catch (unlockErr) {
+        console.error('[SetupPage] vault auto-unlock after restore failed:', unlockErr);
+        // Non-fatal — user will see the locked state and can unlock manually
+      }
+
+      // Fire-and-forget: publish X25519 pubkey for group vault key exchange
+      tryPublishPublicKey(unlockPassword, response.userId);
+
       onSetupComplete({
-        username: response.username || 'Transferred User',
+        username: response.username,
         userId: response.userId,
         token: response.token,
-        setupMode: 'transfer',
-        transferredData: {
-          passwords: response.passwords || [],
-          notes: response.notes || []
-        }
+        masterPassword: unlockPassword,
+        setupMode: 'restore',
       });
-      
     } catch (err) {
-      console.error('❌ Transfer failed:', err);
-      setError(err.message || 'Failed to use transfer token');
+      console.error('Restore failed:', err);
+      if (err.code === 'ANTIVIRUS_DISABLED' && onSecurityBlocked) {
+        onSecurityBlocked({ reason: err.message, snapshot: getLastSnapshot() });
+        return;
+      }
+      setError(err.message || 'Failed to restore from backup');
     } finally {
       setLoading(false);
     }
@@ -205,12 +243,20 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
           formData.masterPassword
         );
 
-        console.log('Registration data:', registrationData); // Для отладки
+        // Свежая проверка безопасности прямо перед setup
+        let securityCheckId = getLastCheckId();
+        if (!securityCheckId) {
+          const checkResult = await runFullCheck();
+          storeCheckResult(checkResult);
+          securityCheckId = checkResult.checkId;
+        }
 
         // Выполняем первичную настройку локально
-        const response = await authService.setup(registrationData);
+        const response = await authService.setup({ ...registrationData, securityCheckId });
         
-        // Успешная настройка
+        // Публикуем X25519 публичный ключ (фоновая задача)
+        tryPublishPublicKey(formData.masterPassword, response.userId);
+
         onSetupComplete({
           username: formData.username,
           userId: response.userId,
@@ -225,12 +271,16 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
           // На шаге 2 вызываем облачный логин
           await handleCloudLogin();
         }
-      } else if (setupMode === 'transfer') {
-        await handleTransferTokenLogin();
+      } else if (setupMode === 'restore') {
+        await handleRestoreFromBackup();
       }
       
     } catch (err) {
       console.error('Setup failed:', err);
+      if (err.code === 'ANTIVIRUS_DISABLED' && onSecurityBlocked) {
+        onSecurityBlocked({ reason: err.message, snapshot: getLastSnapshot() });
+        return;
+      }
       setError(err.message || 'Failed to complete setup. Please try again.');
     } finally {
       setLoading(false);
@@ -345,14 +395,13 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
                   <p>Login with your cloud account credentials</p>
                 </button>
 
-                <button 
-                  className="setup-mode-button transfer-token"
-                  onClick={() => handleSetupModeSelect('transfer')}
-                  disabled={serverError}
+                <button
+                  className="setup-mode-button restore-backup"
+                  onClick={() => handleSetupModeSelect('restore')}
                 >
-                  <Smartphone size={32} />
-                  <h3>Transfer from Device</h3>
-                  <p>Use transfer token from another device</p>
+                  <Download size={32} />
+                  <h3>Restore from Backup</h3>
+                  <p>Restore vault from a *.vault backup file</p>
                 </button>
               </div>
             </motion.div>
@@ -370,7 +419,7 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
               <p>
                 {setupMode === 'new' && 'Creating a new local vault'}
                 {setupMode === 'cloud' && 'Connecting to cloud account'}
-                {setupMode === 'transfer' && 'Transferring from another device'}
+                {setupMode === 'restore' && 'Restoring vault from backup file'}
               </p>
               <button className="btn-primary" onClick={handleNext}>
                 Continue
@@ -481,7 +530,7 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
               </button>
             </motion.div>
           );
-        } else if (setupMode === 'transfer') {
+        } else if (setupMode === 'restore') {
           return (
             <motion.div
               className="step-content"
@@ -489,31 +538,40 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              <Smartphone size={40} className="step-icon" />
-              <h2>Device Transfer</h2>
-              <p>Enter the transfer token generated on your other device</p>
-              
+              <Download size={40} className="step-icon" />
+              <h2>Restore from Backup</h2>
+              <p>Enter your master password and select the *.vault backup file</p>
+
               <div className="form-group">
-                <label htmlFor="transferToken">Transfer Token</label>
-                <input
-                  id="transferToken"
-                  type="text"
-                  value={formData.transferToken}
-                  onChange={(e) => handleInputChange('transferToken', e.target.value)}
-                  placeholder="Enter transfer token"
-                  autoFocus
-                />
-                <small>This token expires in 5 minutes</small>
+                <label htmlFor="restorePassword">Master Password</label>
+                <div className="password-input-wrapper">
+                  <input
+                    id="restorePassword"
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.restorePassword}
+                    onChange={(e) => handleInputChange('restorePassword', e.target.value)}
+                    placeholder="Enter master password used during backup"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <small>The password must match the one used when the backup was created</small>
               </div>
 
               {error && <div className="error-message">{error}</div>}
 
-              <button 
-                className="btn-primary" 
+              <button
+                className="btn-primary"
                 onClick={handleComplete}
-                disabled={!formData.transferToken.trim() || loading}
+                disabled={!formData.restorePassword.trim() || loading}
               >
-                {loading ? 'Transferring...' : 'Transfer Data'}
+                {loading ? 'Restoring...' : 'Choose File & Restore'}
               </button>
             </motion.div>
           );
@@ -521,8 +579,7 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
         break;
 
       case 3:
-        if (setupMode === 'transfer') {
-          // Transfer mode goes directly to completion
+        if (setupMode === 'restore') {
           return renderCompleteStep();
         } else if (setupMode === 'cloud') {
           // Cloud mode - OTP verification step
@@ -683,7 +740,7 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
       <button 
         className="btn-primary btn-large" 
         onClick={handleComplete}
-        disabled={loading}
+        disabled={loading || (setupMode === 'new' && status === 'denied')}
       >
         {loading ? 'Setting up...' : (
           setupMode === 'new' ? 'Create Vault' :
@@ -696,7 +753,40 @@ const SetupPage = ({ onSetupComplete, isFirstTime, serverError }) => {
 
   return (
     <div className="setup-page">
-      <div className="setup-container">
+      <div className="setup-container" style={{ position: 'relative' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: '0.5rem',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+            alignItems: 'center',
+          }}
+        >
+          <SecurityStatusBadge
+            status={status}
+            snapshot={snapshot}
+            denyReason={denyReason}
+            policy={policy}
+            onRecheck={recheck}
+          />
+        </div>
+        {status === 'denied' && (
+          <div
+            style={{
+              color: 'var(--color-warning, #f59e0b)',
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              padding: '0.5rem 0.75rem',
+              borderRadius: 8,
+              fontSize: '0.9rem',
+              marginBottom: '0.75rem',
+            }}
+          >
+            {denyReason || 'Создание сейфа недоступно, пока не соблюдена политика безопасности устройства.'}
+          </div>
+        )}
         {/* Progress Steps */}
         <div className="setup-steps">
           {steps.map((step, index) => {

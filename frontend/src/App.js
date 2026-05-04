@@ -5,6 +5,10 @@ import SetupPage from './pages/SetupPage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import { authService } from './services/authService';
+import { secureService } from './services/secureService';
+import { resetWidgets } from './services/widgetService';
+import { runFullCheck, storeCheckResult } from './services/securityService';
+import { SecurityBlockedScreen } from './components/SecurityBlockedScreen';
 import './styles/variables.css';
 import './styles/globals.css';
 
@@ -13,13 +17,18 @@ const APP_STATES = {
   LOADING: 'loading',
   SETUP: 'setup',
   LOGIN: 'login',
-  DASHBOARD: 'dashboard'
+  DASHBOARD: 'dashboard',
+  SECURITY_BLOCKED: 'security_blocked',
 };
 
 function App() {
   const [appState, setAppState] = useState(APP_STATES.LOADING);
   const [user, setUser] = useState(null);
   const [error, setError] = useState(null);
+  const [securityBlockedInfo, setSecurityBlockedInfo] = useState({
+    reason: null,
+    snapshot: null,
+  });
 
   // Check app initialization state
   useEffect(() => {
@@ -64,6 +73,24 @@ function App() {
         }
       }
 
+      // Контроль устройства перед входом/настройкой
+      try {
+        const sec = await runFullCheck();
+        storeCheckResult(sec);
+        if (sec.allowed === false) {
+          setSecurityBlockedInfo({ reason: sec.denyReason, snapshot: sec.snapshot });
+          setAppState(APP_STATES.SECURITY_BLOCKED);
+          return;
+        }
+      } catch (secErr) {
+        console.error('Security pre-check failed:', secErr);
+        setError(
+          'Не удалось проверить безопасность устройства. Запустите локальный сервер (порт 3001).'
+        );
+        setAppState(APP_STATES.SETUP);
+        return;
+      }
+
       // Проверяем статус настройки сервера
       const setupStatus = await authService.checkSetupStatus();
       
@@ -103,6 +130,27 @@ function App() {
     setAppState(APP_STATES.LOGIN);
   };
 
+  const handleUserDataChange = (patch) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  const handleAccountDeleted = async () => {
+    try {
+      await secureService.lock();
+    } catch (e) {
+      console.warn('lock after account delete:', e);
+    }
+    try {
+      authService.logout();
+      localStorage.removeItem('vaultBackupHistory');
+      resetWidgets();
+    } catch (e) {
+      console.warn('cleanup after account delete:', e);
+    }
+    setUser(null);
+    setAppState(APP_STATES.SETUP);
+  };
+
   const handleGoToSetup = () => {
     setError(null);
     setAppState(APP_STATES.SETUP);
@@ -111,6 +159,16 @@ function App() {
   const handleGoToLogin = () => {
     setError(null);
     setAppState(APP_STATES.LOGIN);
+  };
+
+  const handleSecurityRetry = async (result) => {
+    if (result?.allowed) {
+      setSecurityBlockedInfo({ reason: null, snapshot: null });
+      setAppState(APP_STATES.LOADING);
+      await initializeApp();
+    } else {
+      setSecurityBlockedInfo({ reason: result?.denyReason, snapshot: result?.snapshot });
+    }
   };
 
   const handleMenuAction = (event) => {
@@ -167,6 +225,23 @@ function App() {
           </motion.div>
         )}
 
+        {appState === APP_STATES.SECURITY_BLOCKED && (
+          <motion.div
+            key="security_blocked"
+            initial="initial"
+            animate="in"
+            exit="out"
+            variants={pageVariants}
+            transition={pageTransition}
+          >
+            <SecurityBlockedScreen
+              denyReason={securityBlockedInfo.reason}
+              snapshot={securityBlockedInfo.snapshot}
+              onRetry={handleSecurityRetry}
+            />
+          </motion.div>
+        )}
+
         {appState === APP_STATES.SETUP && (
           <motion.div
             key="setup"
@@ -180,6 +255,10 @@ function App() {
               onSetupComplete={handleSetupComplete}
               isFirstTime={true}
               serverError={error}
+              onSecurityBlocked={({ reason, snapshot }) => {
+                setSecurityBlockedInfo({ reason, snapshot });
+                setAppState(APP_STATES.SECURITY_BLOCKED);
+              }}
             />
           </motion.div>
         )}
@@ -196,6 +275,10 @@ function App() {
             <LoginPage 
               onLoginSuccess={handleLoginSuccess}
               onGoToSetup={handleGoToSetup}
+              onSecurityBlocked={({ reason, snapshot }) => {
+                setSecurityBlockedInfo({ reason, snapshot });
+                setAppState(APP_STATES.SECURITY_BLOCKED);
+              }}
             />
           </motion.div>
         )}
@@ -212,6 +295,8 @@ function App() {
             <DashboardPage 
               user={user}
               onLogout={handleLogout}
+              onUserDataChange={handleUserDataChange}
+              onAccountDeleted={handleAccountDeleted}
             />
           </motion.div>
         )}

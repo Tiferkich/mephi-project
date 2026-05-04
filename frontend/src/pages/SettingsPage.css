@@ -1,0 +1,174 @@
+/* Компактная навигация настроек, в духе карточек дашборда */
+.settings-page {
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  box-sizing: border-box;
+}
+
+.settings-page__row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--spacing-xl);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* Узкий блок с меню (не на всю высоту/ширину экрана) */
+.settings-page__nav-wrap {
+  flex: 0 0 auto;
+  width: 208px;
+  position: sticky;
+  top: var(--spacing-lg);
+}
+
+.settings-page__nav-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.settings-page__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-page__back:hover {
+  border-color: var(--border-color-hover);
+  color: var(--text-primary);
+}
+
+.settings-page__label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  padding: var(--spacing-xs) var(--spacing-sm) 0;
+  margin: 0;
+}
+
+.settings-page__nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.settings-page__nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.settings-page__nav-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.settings-page__nav-item--active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-color);
+}
+
+.settings-page__nav-item--active .settings-page__nav-item-icon {
+  color: var(--color-success);
+}
+
+.settings-page__nav-item-icon {
+  flex: none;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+
+.settings-page__nav-item > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-page__user {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm) 12px 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-color);
+  word-break: break-all;
+}
+
+.settings-page__main {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0 var(--spacing-2xl);
+  overflow-y: auto;
+}
+
+.settings-page__title {
+  margin: 0 0 var(--spacing-xl);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.settings-page__title-icon {
+  color: var(--color-success);
+  font-size: 22px;
+}
+
+/* Степпер: не на всю ширину, как в Setup */
+.settings-page__stepper {
+  max-width: 600px;
+}
+
+.settings-page__stepper .setup-container {
+  max-width: 600px;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .settings-page__row {
+    flex-direction: column;
+  }
+
+  .settings-page__nav-wrap {
+    width: 100%;
+    max-width: 320px;
+    position: static;
+  }
+}

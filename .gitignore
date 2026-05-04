@@ -1,9 +1,30 @@
-./frontend/node_modules/*
-./frontend/node_modules
-./ManagmentLocalServer/.mvn/*
-./ManagmentLocalServer/target/*
-./ManagmentServer/.mvn/*
-./ManagmentServer/target/*
-./guides/*
-./guide/*
-./frontend/node_modules/*
+# --- Node / Electron ---
+./frontend/node_modules/
+./frontend/build/
+
+# --- Java build artifacts ---
+./ManagmentLocalServer/.mvn/
+./ManagmentLocalServer/target/
+./ManagmentServer/.mvn/
+./ManagmentServer/target/
+
+# --- Runtime data ---
+./ManagmentLocalServer/data/
+./ManagmentServer/data/
+
+# --- Environment / secrets (never commit real .env) ---
+.env
+**/.env
+# Keep example files
+!.env.example
+!**/.env.example
+
+# --- Documentation drafts ---
+./guides/
+./guide/
+./docs/
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/

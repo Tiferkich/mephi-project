@@ -257,6 +257,26 @@ public class FileService {
         
         return new FileStats(count, totalSize != null ? totalSize : 0L);
     }
+
+    /**
+     * Удаляет с диска и из БД все файлы, привязанные к пользователю.
+     */
+    @Transactional
+    public void deleteAllFilesForUser(String userId) throws IOException {
+        List<FileEntry> entries = fileEntryRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        for (FileEntry fe : entries) {
+            String sp = fe.getStoragePath();
+            if (sp != null && !sp.isBlank()) {
+                Path filePath = Paths.get(storagePath, sp);
+                if (Files.exists(filePath)) {
+                    Files.delete(filePath);
+                    log.info("Deleted file on disk: {}", filePath);
+                }
+            }
+        }
+        fileEntryRepository.deleteAllByUserId(userId);
+        log.info("Removed all file records for user {}", userId);
+    }
     
     /**
      * Статистика файлов

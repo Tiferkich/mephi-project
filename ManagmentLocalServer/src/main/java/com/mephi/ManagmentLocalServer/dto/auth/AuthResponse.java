@@ -12,4 +12,6 @@ public class AuthResponse {
     private String token;
     private String username;
     private boolean isSetup;
+    /** Стабильный UUID; для клиента (соль крипто, идентификатор) */
+    private String userId;
 } 

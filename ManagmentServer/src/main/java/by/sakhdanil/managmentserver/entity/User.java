@@ -61,6 +61,11 @@ public class User implements UserDetails {
     
     @Column
     private String localUserId;
+
+    /** X25519 public key (base64) derived client-side from the master password.
+     *  Used by group admins to wrap the group key for this user via ECDH. */
+    @Column(columnDefinition = "TEXT")
+    private String publicKey;
     
     @Column(nullable = false)
     private Instant createdAt;

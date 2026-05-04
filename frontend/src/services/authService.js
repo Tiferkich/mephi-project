@@ -1,7 +1,22 @@
 import axios from 'axios';
 import { createMasterPasswordHash } from '../utils/crypto';
+import * as securityService from './securityService';
 
-const API_BASE_URL = 'http://localhost:3001';
+function throwAntivirusIf403(error) {
+  if (error.response?.status === 403 && error.response?.data?.error === 'ANTIVIRUS_DISABLED') {
+    const e = new Error(
+      error.response.data.reason || 'Требуется включённый антивирус (политика безопасности)'
+    );
+    e.code = 'ANTIVIRUS_DISABLED';
+    e.reason = error.response.data.reason;
+    throw e;
+  }
+}
+
+const API_BASE_URL =
+  window.electronAPI?.localServerUrl ||
+  process.env.REACT_APP_LOCAL_SERVER_URL ||
+  'http://localhost:3001';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -60,10 +75,20 @@ export const authService = {
   // Setup new user (first time setup) - ТОЛЬКО ЛОКАЛЬНО
   async setup(userData) {
     try {
+      const check = await securityService.runFullCheck();
+      securityService.storeCheckResult(check);
+      if (check.allowed === false) {
+        const e = new Error(
+          check.denyReason || 'Состояние безопасности устройства не соответствует политике'
+        );
+        e.code = 'ANTIVIRUS_DISABLED';
+        throw e;
+      }
       const response = await api.post('/auth/setup', {
         username: userData.username,
         salt: userData.salt,
-        passwordHash: userData.masterPasswordHash // Отправляем уже захешированный пароль
+        passwordHash: userData.masterPasswordHash, // Отправляем уже захешированный пароль
+        securityCheckId: check.checkId
       });
       
       if (response.data.token) {
@@ -73,23 +98,35 @@ export const authService = {
       return response.data;
     } catch (error) {
       console.error('Setup error:', error);
-      
+      if (error.code === 'ANTIVIRUS_DISABLED') {
+        throw error;
+      }
       if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
         throw new Error('Cannot connect to local server. Please make sure the local server is running.');
       }
-      
-      throw new Error(error.response?.data?.message || 'Setup failed');
+      throwAntivirusIf403(error);
+      throw new Error(error.response?.data?.message || error.message || 'Setup failed');
     }
   },
 
   // Login existing user
   async login(masterPassword) {
     try {
+      const check = await securityService.runFullCheck();
+      securityService.storeCheckResult(check);
+      if (check.allowed === false) {
+        const e = new Error(
+          check.denyReason || 'Состояние безопасности устройства не соответствует политике'
+        );
+        e.code = 'ANTIVIRUS_DISABLED';
+        throw e;
+      }
       // Создаем SHA-256 хеш от мастер-пароля
       const passwordHash = await createMasterPasswordHash(masterPassword);
       
       const response = await api.post('/auth/login', {
-        passwordHash: passwordHash
+        passwordHash: passwordHash,
+        securityCheckId: check.checkId
       });
       
       if (response.data.token) {
@@ -99,12 +136,14 @@ export const authService = {
       return response.data;
     } catch (error) {
       console.error('Login error:', error);
-      
+      if (error.code === 'ANTIVIRUS_DISABLED') {
+        throw error;
+      }
       if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
         throw new Error('Cannot connect to local server. Please make sure the local server is running.');
       }
-      
-      throw new Error(error.response?.data?.message || 'Login failed');
+      throwAntivirusIf403(error);
+      throw new Error(error.response?.data?.message || error.message || 'Login failed');
     }
   },
 
@@ -117,6 +156,74 @@ export const authService = {
       return response.data;
     } catch (error) {
       throw new Error('Token validation failed');
+    }
+  },
+
+  /**
+   * Смена отображаемого имени пользователя. Возвращает AuthResponse (новый JWT, тот же userId).
+   */
+  async updateUsername(newUsername, masterPassword) {
+    const check = await securityService.runFullCheck();
+    securityService.storeCheckResult(check);
+    if (check.allowed === false) {
+      const e = new Error(
+        check.denyReason || 'Состояние безопасности устройства не соответствует политике'
+      );
+      e.code = 'ANTIVIRUS_DISABLED';
+      throw e;
+    }
+    const passwordHash = await createMasterPasswordHash(masterPassword);
+    try {
+      const response = await api.patch('/api/account/username', {
+        newUsername: (newUsername || '').trim(),
+        passwordHash,
+        securityCheckId: check.checkId
+      });
+      if (response.data?.token) {
+        localStorage.setItem('authToken', response.data.token);
+      }
+      return response.data;
+    } catch (error) {
+      throwAntivirusIf403(error);
+      if (error.code === 'ANTIVIRUS_DISABLED') {
+        throw error;
+      }
+      if (error.response?.data?.message) {
+        const e = new Error(error.response.data.message);
+        throw e;
+      }
+      throw new Error(error.message || 'Не удалось сменить имя');
+    }
+  },
+
+  /**
+   * Полное удаление локального аккаунта. После — вызвать authService.logout() с клиента.
+   */
+  async deleteAccount(masterPassword) {
+    const check = await securityService.runFullCheck();
+    securityService.storeCheckResult(check);
+    if (check.allowed === false) {
+      const e = new Error(
+        check.denyReason || 'Состояние безопасности устройства не соответствует политике'
+      );
+      e.code = 'ANTIVIRUS_DISABLED';
+      throw e;
+    }
+    const passwordHash = await createMasterPasswordHash(masterPassword);
+    try {
+      await api.post('/api/account/delete', {
+        passwordHash,
+        securityCheckId: check.checkId
+      });
+    } catch (error) {
+      throwAntivirusIf403(error);
+      if (error.code === 'ANTIVIRUS_DISABLED') {
+        throw error;
+      }
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error(error.message || 'Не удалось удалить аккаунт');
     }
   },
 
@@ -231,30 +338,6 @@ export const authService = {
     }
   },
 
-  // ✅ НОВОЕ: Использование transfer токена
-  async useTransferToken(transferToken) {
-    try {
-      // Отправляем transfer токен на локальный сервер
-      const response = await api.post('/auth/use-transfer', {
-        transferToken: transferToken
-      });
-      
-      // Если успешно, сохраняем локальный токен
-      if (response.data.token) {
-        localStorage.setItem('authToken', response.data.token);
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('Transfer token error:', error);
-      
-      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-        throw new Error('Cannot connect to local server. Please make sure the local server is running.');
-      }
-      
-      throw new Error(error.response?.data?.error || 'Transfer token usage failed');
-    }
-  }
 };
 
 // Проверка истечения JWT токена

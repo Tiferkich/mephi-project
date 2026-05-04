@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import 'boxicons/css/boxicons.min.css';
 import { remoteService, syncService, authService, passwordService, noteService } from '../services/authService';
@@ -15,9 +15,13 @@ import FileManager from '../components/FileManager';
 import Widget from '../components/Widget';
 import WidgetGrid from '../components/WidgetGrid';
 import CreateWidgetModal from '../components/CreateWidgetModal';
+import SettingsPage from './SettingsPage';
+import GroupVaultPanel from '../components/GroupVaultPanel';
+import fileService from '../services/fileService';
 import { useToast } from '../hooks/useToast';
+import { userCryptoSalt } from '../utils/userCrypto';
 
-const DashboardPage = ({ user, onLogout }) => {
+const DashboardPage = ({ user, onLogout, onUserDataChange, onAccountDeleted }) => {
   const [remoteStatus, setRemoteStatus] = useState({
     hasRemoteAccount: false,
     remoteServerAvailable: false,
@@ -53,6 +57,7 @@ const DashboardPage = ({ user, onLogout }) => {
   // File Manager state
   const [showFileManager, setShowFileManager] = useState(false);
   const [masterPassword, setMasterPassword] = useState(null);
+  const [fileStats, setFileStats] = useState({ fileCount: 0, totalSizeFormatted: '0 B' });
 
   // Widget system state
   const [widgets, setWidgets] = useState([]);
@@ -60,6 +65,12 @@ const DashboardPage = ({ user, onLogout }) => {
 
   // Toast system
   const { toasts, showSuccess, showError, showWarning, showInfo, hideToast } = useToast();
+
+  // Page navigation: 'dashboard' | 'settings'
+  const [currentView, setCurrentView] = useState('dashboard');
+
+  // Vault mode: 'personal' | 'group'
+  const [vaultMode, setVaultMode] = useState('personal');
 
   // Load data on component mount
   useEffect(() => {
@@ -78,17 +89,33 @@ const DashboardPage = ({ user, onLogout }) => {
         setIsLocked(true);
         return;
       }
+
+      // After vault restore the SetupPage unlocks the vault and passes masterPassword
+      // through the user prop. Propagate it so FileManager can decrypt file names.
+      if (user?.masterPassword) {
+        setMasterPassword(user.masterPassword);
+      }
       
       await Promise.all([
         loadPasswords(),
         loadNotes(),
-        loadRemoteStatus()
+        loadRemoteStatus(),
+        loadFileStats()
       ]);
     } catch (error) {
       console.error('Failed to load initial data:', error);
       setIsLocked(true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFileStats = async () => {
+    try {
+      const stats = await fileService.getFileStats();
+      setFileStats(stats);
+    } catch {
+      // Игнорируем ошибки статистики — не критично
     }
   };
 
@@ -518,7 +545,7 @@ const DashboardPage = ({ user, onLogout }) => {
     
     try {
       // Разблокируем хранилище в main процессе
-      await secureService.unlock(password, user.username || 'default-salt');
+      await secureService.unlock(password, userCryptoSalt(user));
       
       // Сохраняем мастер-пароль для FileManager (используется для ГОСТ шифрования файлов)
       setMasterPassword(password);
@@ -806,6 +833,45 @@ const DashboardPage = ({ user, onLogout }) => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+          {/* Vault mode switcher — visible only when cloud account is connected */}
+          {remoteStatus.hasRemoteAccount && remoteStatus.tokenValid && !isLocked && (
+            <div style={{
+              display: 'flex',
+              gap: 4,
+              padding: 4,
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 10,
+            }}>
+              {['personal', 'group'].map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setVaultMode(mode)}
+                  style={{
+                    padding: '5px 14px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: 'var(--font-weight-medium)',
+                    transition: 'all 0.2s ease',
+                    borderRadius: 7,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: vaultMode === mode
+                      ? 'var(--color-success)'
+                      : 'transparent',
+                    color: vaultMode === mode ? '#fff' : 'var(--text-secondary)',
+                    boxShadow: vaultMode === mode ? '0 1px 4px rgba(0,0,0,0.25)' : 'none',
+                  }}
+                >
+                  <i className={`bx ${mode === 'personal' ? 'bx-lock' : 'bx-group'}`} style={{ fontSize: 14 }} />
+                  {mode === 'personal' ? 'Личный' : 'Группы'}
+                </button>
+              ))}
+            </div>
+          )}
+
           <button
             onClick={handleLockUnlock}
             style={{
@@ -821,10 +887,10 @@ const DashboardPage = ({ user, onLogout }) => {
               transition: 'all var(--transition-fast)'
             }}
             onMouseEnter={(e) => {
-              e.target.style.background = isLocked ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)';
+              e.currentTarget.style.background = isLocked ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.background = 'none';
+              e.currentTarget.style.background = 'none';
             }}
             title={isLocked ? "Unlock vault to decrypt data" : "Lock vault and clear data from memory"}
           >
@@ -833,6 +899,7 @@ const DashboardPage = ({ user, onLogout }) => {
           </button>
           
           <button
+            onClick={() => setCurrentView('settings')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -846,12 +913,12 @@ const DashboardPage = ({ user, onLogout }) => {
               transition: 'all var(--transition-fast)'
             }}
             onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--color-success)';
-              e.target.style.color = 'var(--text-primary)';
+              e.currentTarget.style.borderColor = 'var(--color-success)';
+              e.currentTarget.style.color = 'var(--text-primary)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--border-color)';
-              e.target.style.color = 'var(--text-secondary)';
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.color = 'var(--text-secondary)';
             }}
           >
             <i className='bx bx-cog' style={{ fontSize: '16px' }}></i>
@@ -873,12 +940,12 @@ const DashboardPage = ({ user, onLogout }) => {
               transition: 'all var(--transition-fast)'
             }}
             onMouseEnter={(e) => {
-              e.target.style.background = 'var(--color-danger)';
-              e.target.style.color = 'white';
+              e.currentTarget.style.background = 'var(--color-danger)';
+              e.currentTarget.style.color = 'white';
             }}
             onMouseLeave={(e) => {
-              e.target.style.background = 'none';
-              e.target.style.color = 'var(--color-danger)';
+              e.currentTarget.style.background = 'none';
+              e.currentTarget.style.color = 'var(--color-danger)';
             }}
           >
             <i className='bx bx-log-out' style={{ fontSize: '16px' }}></i>
@@ -962,7 +1029,7 @@ const DashboardPage = ({ user, onLogout }) => {
           </p>
         </motion.div>
 
-        {/* Sync Status Card */}
+        {/* Files Stats */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -976,205 +1043,51 @@ const DashboardPage = ({ user, onLogout }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-            <i className={`bx ${getSyncIconClass()}`} style={{ 
-              color: remoteStatus.remoteServerAvailable ? 'var(--color-success)' : 'var(--text-secondary)', 
-              marginRight: 'var(--spacing-sm)',
-              fontSize: '24px'
-            }}></i>
-            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Remote Sync</h3>
+            <i className='bx bx-folder' style={{ color: 'var(--color-success)', marginRight: 'var(--spacing-sm)', fontSize: '24px' }}></i>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Files</h3>
           </div>
-          
-          <div style={{ marginBottom: 'var(--spacing-md)' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--spacing-xs)',
-              marginBottom: 'var(--spacing-xs)'
-            }}>
-              <p style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--text-primary)',
-                margin: 0,
-                fontWeight: 'var(--font-weight-medium)'
-              }}>
-                Status:
-              </p>
-              {remoteStatus.remoteServerAvailable ? (
-                remoteStatus.hasRemoteAccount ? (
-                  remoteStatus.tokenValid ? (
-                    <>
-                      <i className='bx bx-check-circle' style={{ color: 'var(--color-success)', fontSize: '14px' }}></i>
-                      <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>
-                        Connected
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <i className='bx bx-error-circle' style={{ color: 'var(--color-warning)', fontSize: '14px' }}></i>
-                      <span style={{ color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)' }}>
-                        Disconnected
-                      </span>
-                    </>
-                  )
-                ) : (
-                  <>
-                    <i className='bx bx-devices' style={{ color: 'var(--color-info)', fontSize: '14px' }}></i>
-                    <span style={{ color: 'var(--color-info)', fontSize: 'var(--font-size-sm)' }}>
-                      Ready to connect
-                    </span>
-                  </>
-                )
-              ) : (
-                <>
-                  <i className='bx bx-wifi-off' style={{ color: 'var(--color-danger)', fontSize: '14px' }}></i>
-                  <span style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
-                    Server offline
-                  </span>
-                </>
-              )}
-            </div>
-            
-            {/* Show unsynced count only if connected */}
-            {remoteStatus.hasRemoteAccount && remoteStatus.tokenValid && (
-              <div style={{
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--text-secondary)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--spacing-xs)'
-              }}>
-                {remoteStatus.unsyncedNotes > 0 || remoteStatus.unsyncedPasswords > 0 ? (
-                  <>
-                    <i className='bx bx-error-circle' style={{ color: 'var(--color-warning)', fontSize: '12px' }}></i>
-                    <span>
-                      {remoteStatus.unsyncedNotes || 0} notes, {remoteStatus.unsyncedPasswords || 0} passwords unsynced
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <i className='bx bx-check-circle' style={{ color: 'var(--color-success)', fontSize: '12px' }}></i>
-                    <span style={{ color: 'var(--color-success)' }}>
-                      All data synchronized
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={handleSync}
-            disabled={syncLoading || !remoteStatus.hasRemoteAccount || !remoteStatus.tokenValid}
-            style={{
-              width: '100%',
-              padding: 'var(--spacing-sm) var(--spacing-md)',
-              background: (remoteStatus.hasRemoteAccount && remoteStatus.tokenValid) ? 
-                'var(--color-success)' : 'var(--bg-tertiary)',
-              color: (remoteStatus.hasRemoteAccount && remoteStatus.tokenValid) ? 
-                'white' : 'var(--text-secondary)',
-              border: 'none',
-              borderRadius: 'var(--border-radius-md)',
-              cursor: (remoteStatus.hasRemoteAccount && remoteStatus.tokenValid) ? 
-                'pointer' : 'not-allowed',
-              opacity: syncLoading ? 0.7 : 1,
-              transition: 'all var(--transition-fast)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--font-weight-medium)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 'var(--spacing-xs)',
-              marginBottom: 'var(--spacing-xs)'
-            }}
-          >
-            {syncLoading && (
-              <motion.i
-                className='bx bx-refresh'
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                style={{ display: 'flex', alignItems: 'center', fontSize: '14px' }}
-              />
-            )}
-            {getSyncButtonText()}
-          </button>
-
-          {/* Force Sync - only show if connected */}
-          {remoteStatus.hasRemoteAccount && remoteStatus.tokenValid && (
-            <button
-              onClick={() => handleForceSync()}
-              disabled={syncLoading}
-              style={{
-                width: '100%',
-                padding: 'var(--spacing-xs) var(--spacing-md)',
-                background: 'none',
-                color: 'var(--color-warning)',
-                border: '1px solid var(--color-warning)',
-                borderRadius: 'var(--border-radius-md)',
-                cursor: 'pointer',
-                transition: 'all var(--transition-fast)',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 'var(--font-weight-medium)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 'var(--spacing-xs)',
-                marginBottom: 'var(--spacing-sm)',
-                opacity: syncLoading ? 0.5 : 1
-              }}
-              onMouseEnter={(e) => {
-                if (!syncLoading) {
-                  e.target.style.background = 'var(--color-warning)';
-                  e.target.style.color = 'white';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!syncLoading) {
-                  e.target.style.background = 'none';
-                  e.target.style.color = 'var(--color-warning)';
-                }
-              }}
-              title="Force sync will overwrite conflicts with cloud data"
-            >
-              <i className='bx bx-bolt' style={{ fontSize: '12px' }}></i>
-              Force Sync
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowSyncManager(true)}
-            style={{
-              width: '100%',
-              padding: 'var(--spacing-sm) var(--spacing-md)',
-              background: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--border-radius-md)',
-              cursor: 'pointer',
-              transition: 'all var(--transition-fast)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--font-weight-medium)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 'var(--spacing-xs)'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--border-color-hover)';
-              e.target.style.background = 'var(--base-light)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--border-color)';
-              e.target.style.background = 'var(--bg-tertiary)';
-            }}
-          >
-            <i className='bx bx-cloud' style={{ fontSize: '14px' }}></i>
-            Cloud Sync Manager
-          </button>
+          <p style={{
+            fontSize: 'var(--font-size-2xl)',
+            fontWeight: 'var(--font-weight-bold)',
+            color: 'var(--color-success)',
+            margin: 0
+          }}>
+            {fileStats.fileCount}
+          </p>
+          <p style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--text-secondary)',
+            margin: 0
+          }}>
+            {fileStats.fileCount > 0 ? fileStats.totalSizeFormatted : 'No files yet'}
+          </p>
         </motion.div>
+
+        {/* Remote Sync moved to Settings page */}
       </div>
 
+      {/* Group Vault Panel (visible when cloud is connected and group mode selected) */}
+      {!isLocked && vaultMode === 'group' && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--border-radius-lg)',
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--shadow-md)',
+            marginBottom: 'var(--spacing-xl)',
+          }}
+        >
+          <GroupVaultPanel
+            masterPassword={masterPassword || user?.masterPassword}
+            userId={user?.userId}
+          />
+        </motion.div>
+      )}
+
       {/* Widgets Section */}
-      {!isLocked && (
+      {!isLocked && vaultMode === 'personal' && (
         <WidgetGrid
           widgets={widgets}
           onReorder={handleReorderWidgets}
@@ -1272,6 +1185,34 @@ const DashboardPage = ({ user, onLogout }) => {
         onClose={() => setShowCreateWidgetModal(false)}
         onCreate={handleCreateWidget}
       />
+
+      {/* Settings Page overlay */}
+      {currentView === 'settings' && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'var(--bg-primary)',
+          overflowY: 'auto',
+          zIndex: 500,
+        }}>
+          <SettingsPage
+            user={user}
+            remoteStatus={remoteStatus}
+            syncLoading={syncLoading}
+            onBack={() => setCurrentView('dashboard')}
+            onSync={handleSync}
+            onForceSync={() => handleForceSync()}
+            onOpenSyncManager={() => setShowSyncManager(true)}
+            getSyncIconClass={getSyncIconClass}
+            getSyncButtonText={getSyncButtonText}
+            showSuccess={showSuccess}
+            showError={showError}
+            onUserDataChange={onUserDataChange}
+            onAccountDeleted={onAccountDeleted}
+            currentMasterPassword={masterPassword}
+            initialSection="backup"
+          />
+        </div>
+      )}
 
       {/* Toast Container */}
       <ToastContainer 

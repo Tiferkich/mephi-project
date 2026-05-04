@@ -13,4 +13,6 @@ public interface PasswordEntryRepository extends JpaRepository<PasswordEntry, Lo
     List<PasswordEntry> findByUser(User user);
     Optional<PasswordEntry> findByIdAndUser(Long id, User user);
     void deleteByIdAndUser(Long id, User user);
+
+    void deleteByUser(User user);
 } 

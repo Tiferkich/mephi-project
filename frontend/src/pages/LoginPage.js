@@ -3,8 +3,26 @@ import { motion } from 'framer-motion';
 import { Shield, Eye, EyeOff, Lock } from 'lucide-react';
 import { authService } from '../services/authService';
 import { secureService } from '../services/secureService';
+import { userCryptoSalt } from '../utils/userCrypto';
+import { useDeviceSecurity } from '../hooks/useDeviceSecurity';
+import { SecurityStatusBadge } from '../components/SecurityStatusBadge';
+import { getLastSnapshot } from '../services/securityService';
+import { publishPublicKey } from '../services/groupService';
 
-const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
+async function tryPublishPublicKey(masterPassword, userId) {
+  try {
+    const result = await window.electronAPI.crypto.deriveX25519Keypair(masterPassword, userId);
+    if (result.success) {
+      await publishPublicKey(result.pubKeyBase64);
+    }
+  } catch (e) {
+    // Non-critical: group features still work if this fails
+    console.warn('[pubkey] failed to publish X25519 public key:', e.message);
+  }
+}
+
+const LoginPage = ({ onLoginSuccess, onGoToSetup, onSecurityBlocked }) => {
+  const { status, snapshot, denyReason, policy, recheck } = useDeviceSecurity({ autoRun: true });
   const [masterPassword, setMasterPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -23,18 +41,29 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
     try {
       const response = await authService.login(masterPassword);
       
-      await secureService.unlock(masterPassword, response.username || 'default-salt');
-      
+      await secureService.unlock(masterPassword, userCryptoSalt({
+        userId: response.userId,
+        username: response.username
+      }));
+
+      // Fire-and-forget: publish X25519 pubkey for group vault E2E key exchange
+      tryPublishPublicKey(masterPassword, response.userId);
+
       onLoginSuccess({
         username: response.username,
         userId: response.userId,
-        token: response.token
+        token: response.token,
+        masterPassword,
       });
       
       setMasterPassword('');
       
     } catch (err) {
       console.error('Login failed:', err);
+      if (err.code === 'ANTIVIRUS_DISABLED' && onSecurityBlocked) {
+        onSecurityBlocked({ reason: err.message, snapshot: getLastSnapshot() });
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);
@@ -61,9 +90,26 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
           boxShadow: 'var(--shadow-lg)',
           padding: 'var(--spacing-2xl)',
           width: '100%',
-          maxWidth: '400px'
+          maxWidth: '400px',
+          position: 'relative',
         }}
       >
+        <div
+          style={{
+            position: 'absolute',
+            top: 'var(--spacing-md)',
+            right: 'var(--spacing-md)',
+          }}
+        >
+          <SecurityStatusBadge
+            status={status}
+            snapshot={snapshot}
+            denyReason={denyReason}
+            policy={policy}
+            onRecheck={recheck}
+          />
+        </div>
+
         {/* Header */}
         <div style={{ 
           textAlign: 'center', 
@@ -93,6 +139,22 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
             Enter your master password to unlock your vault
           </p>
         </div>
+
+        {status === 'denied' && (
+          <div
+            style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid var(--color-danger)',
+              color: 'var(--color-danger)',
+              padding: 'var(--spacing-sm) var(--spacing-md)',
+              borderRadius: 'var(--border-radius-md)',
+              fontSize: 'var(--font-size-sm)',
+              marginBottom: 'var(--spacing-md)',
+            }}
+          >
+            {denyReason || 'Вход недоступен: включите антивирусную защиту (политика безопасности).'}
+          </div>
+        )}
 
         {/* Login Form */}
         <form onSubmit={handleSubmit}>
@@ -199,7 +261,7 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
           {/* Login Button */}
           <button
             type="submit"
-            disabled={loading || !masterPassword.trim()}
+            disabled={loading || !masterPassword.trim() || status === 'denied'}
             style={{
               width: '100%',
               backgroundColor: 'var(--color-success)',
@@ -209,9 +271,9 @@ const LoginPage = ({ onLoginSuccess, onGoToSetup }) => {
               borderRadius: 'var(--border-radius-md)',
               fontSize: 'var(--font-size-md)',
               fontWeight: 'var(--font-weight-medium)',
-              cursor: loading || !masterPassword.trim() ? 'not-allowed' : 'pointer',
+              cursor: loading || !masterPassword.trim() || status === 'denied' ? 'not-allowed' : 'pointer',
               transition: 'all var(--transition-fast)',
-              opacity: loading || !masterPassword.trim() ? 0.5 : 1,
+              opacity: loading || !masterPassword.trim() || status === 'denied' ? 0.5 : 1,
               transform: 'translateY(0)',
               marginBottom: 'var(--spacing-lg)'
             }}

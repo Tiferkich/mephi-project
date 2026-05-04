@@ -10,7 +10,10 @@
 import axios from 'axios';
 import { encryptFile, decryptFile, encryptString, decryptString } from './gostCrypto';
 
-const LOCAL_API = 'http://localhost:3001';
+const LOCAL_API =
+  window.electronAPI?.localServerUrl ||
+  process.env.REACT_APP_LOCAL_SERVER_URL ||
+  'http://localhost:3001';
 
 // Создаем axios instance с токеном для локального сервера
 const createLocalApi = (baseURL) => {

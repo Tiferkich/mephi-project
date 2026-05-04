@@ -14,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,9 +29,15 @@ public class UserService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final RemoteAuthService remoteAuthService;
+    private final DeviceSecurityService deviceSecurityService;
+    private final FileService fileService;
 
     @Transactional
     public AuthResponse setup(SetupRequest request) {
+        if (deviceSecurityService.isEnforce()) {
+            deviceSecurityService.requireRecentAllowedCheck(request.getSecurityCheckId());
+        }
+
         // Проверим, что пользователей еще нет
         long userCount = userRepository.countSetupUsers();
         if (userCount > 0) {
@@ -51,10 +58,14 @@ public class UserService {
         // Генерируем JWT токен
         String jwtToken = jwtService.generateToken(user);
 
-        return new AuthResponse(jwtToken, user.getUsername(), true);
+        return new AuthResponse(jwtToken, user.getUsername(), true, user.getId());
     }
 
     public AuthResponse login(LoginRequest request) {
+        if (deviceSecurityService.isEnforce()) {
+            deviceSecurityService.requireRecentAllowedCheck(request.getSecurityCheckId());
+        }
+
         // Получаем единственного пользователя (в локальном режиме один пользователь)
         User user = userRepository.findSetupUser()
                 .orElseThrow(() -> new IllegalStateException("No user setup found. Please run setup first."));
@@ -71,7 +82,65 @@ public class UserService {
         String jwtToken = jwtService.generateToken(user);
         log.info("User logged in: {}", user.getUsername());
 
-        return new AuthResponse(jwtToken, user.getUsername(), true);
+        return new AuthResponse(jwtToken, user.getUsername(), true, user.getId());
+    }
+
+    @Transactional
+    public AuthResponse changeUsername(String newUsername, String passwordHash, String securityCheckId) {
+        if (deviceSecurityService.isEnforce()) {
+            deviceSecurityService.requireRecentAllowedCheck(securityCheckId);
+        }
+        User user = getCurrentUser();
+        if (newUsername == null) {
+            throw new IllegalArgumentException("Имя пользователя обязательно");
+        }
+        String trimmed = newUsername.trim();
+        if (trimmed.isEmpty() || trimmed.length() < 3) {
+            throw new IllegalArgumentException("Имя пользователя: от 3 до 50 символов");
+        }
+        if (trimmed.length() > 50) {
+            throw new IllegalArgumentException("Имя пользователя: не более 50 символов");
+        }
+        if (trimmed.equals(user.getUsername())) {
+            String jwt = jwtService.generateToken(user);
+            return new AuthResponse(jwt, user.getUsername(), true, user.getId());
+        }
+        if (userRepository.findByUsername(trimmed).isPresent()) {
+            throw new IllegalArgumentException("Это имя пользователя уже занято");
+        }
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(user.getUsername(), passwordHash)
+            );
+        } catch (Exception e) {
+            log.warn("changeUsername: неверный мастер-пароль: {}", e.getMessage());
+            throw new IllegalArgumentException("Неверный мастер-пароль", e);
+        }
+        user.setUsername(trimmed);
+        user = userRepository.save(user);
+        String jwtToken = jwtService.generateToken(user);
+        log.info("Имя пользователя изменено на: {}", trimmed);
+        return new AuthResponse(jwtToken, user.getUsername(), true, user.getId());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteAccount(String passwordHash, String securityCheckId) throws IOException {
+        if (deviceSecurityService.isEnforce()) {
+            deviceSecurityService.requireRecentAllowedCheck(securityCheckId);
+        }
+        User user = getCurrentUser();
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(user.getUsername(), passwordHash)
+            );
+        } catch (Exception e) {
+            log.warn("deleteAccount: неверный мастер-пароль: {}", e.getMessage());
+            throw new IllegalArgumentException("Неверный мастер-пароль", e);
+        }
+        fileService.deleteAllFilesForUser(user.getId());
+        String uid = user.getId();
+        userRepository.delete(user);
+        log.info("Аккаунт удалён: userId={}", uid);
     }
 
     public boolean isSetup() {
@@ -390,82 +459,6 @@ public class UserService {
         } catch (Exception e) {
             log.error("JWT token login failed: {}", e.getMessage(), e);
             throw new RuntimeException("JWT login failed: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Использование transfer токена
-     */
-    @Transactional
-    public Map<String, Object> useTransferToken(String transferToken) {
-        try {
-            log.info("Starting transfer token usage process");
-            
-            // 1. Используем transfer токен через RemoteAuthService
-            Map<String, Object> transferData = remoteAuthService.useTransferToken(transferToken);
-            
-            // 2. Извлекаем данные из ответа
-            String username = (String) transferData.get("username");
-            String remoteUserId = (String) transferData.get("userId");
-            String remoteToken = (String) transferData.get("token");
-            String masterPasswordHash = (String) transferData.get("passwordHash");
-            String salt = (String) transferData.get("salt");
-            
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> passwords = (List<Map<String, Object>>) transferData.get("passwords");
-            
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> notes = (List<Map<String, Object>>) transferData.get("notes");
-            
-            if (username == null || remoteUserId == null || remoteToken == null || 
-                masterPasswordHash == null || salt == null) {
-                throw new RuntimeException("Invalid transfer data - missing required fields");
-            }
-            
-            log.info("Transfer token validated for user: {}", username);
-            
-            // 3. Удаляем существующих пользователей (если есть)
-            if (isSetup()) {
-                log.info("Removing existing local account for transfer");
-                userRepository.deleteAll();
-            }
-            
-            // 4. Создаем нового пользователя с полными данными
-            User newUser = new User();
-            newUser.setId(UUID.randomUUID().toString());
-            newUser.setUsername(username);
-            newUser.setSalt(salt);
-            newUser.setPasswordHash(masterPasswordHash);
-            newUser.setSetup(true);
-            newUser.setRemoteId(remoteUserId);
-            newUser.setRemoteToken(remoteToken);
-            
-            newUser = userRepository.save(newUser);
-            
-            // 5. Импортируем данные (здесь можно расширить логику импорта)
-            int passwordsImported = passwords != null ? passwords.size() : 0;
-            int notesImported = notes != null ? notes.size() : 0;
-            
-            log.info("Transfer completed: {} passwords, {} notes", passwordsImported, notesImported);
-            
-            // 6. Генерируем локальный JWT токен
-            String localToken = jwtService.generateToken(newUser);
-            
-            log.info("Transfer token usage completed for user: {}", username);
-            
-            return Map.of(
-                "success", true,
-                "message", "Data transferred successfully",
-                "token", localToken,
-                "username", username,
-                "userId", newUser.getId(),
-                "passwordsImported", passwordsImported,
-                "notesImported", notesImported
-            );
-            
-        } catch (Exception e) {
-            log.error("Transfer token usage failed: {}", e.getMessage(), e);
-            throw new RuntimeException("Transfer token usage failed: " + e.getMessage());
         }
     }
 

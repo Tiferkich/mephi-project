@@ -543,4 +543,10 @@ public class UserService implements UserDetailsService {
     public EmailService getEmailService() {
         return emailService;
     }
+
+    /** Store the X25519 public key uploaded by the client after vault unlock. */
+    public void updatePublicKey(User user, String publicKey) {
+        user.setPublicKey(publicKey);
+        userRepository.save(user);
+    }
 } 

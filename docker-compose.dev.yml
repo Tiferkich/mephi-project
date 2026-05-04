@@ -10,6 +10,8 @@
 #   - Local Server (Spring):  http://localhost:3001
 #   - Remote Server (Spring): http://localhost:8080
 #   - PostgreSQL:             localhost:5432
+#   - MinIO (S3 API / Console): http://localhost:9000  /  http://localhost:9001
+#   - LiveReload (если смотрите в браузер): remote 35728, local 35730
 #
 # Hot Reload:
 #   ✅ Frontend: Изменения в frontend/src/ автоматически обновляют браузер
@@ -17,8 +19,6 @@
 #   ✅ Remote Server: Spring DevTools перезагружает при изменении .java файлов
 #
 # =============================================================================
-
-version: '3.8'
 
 services:
   # ===========================================================================
@@ -47,6 +47,48 @@ services:
       start_period: 10s
 
   # ===========================================================================
+  # 📦 MINIO (S3-compatible storage for remote backups)
+  # ===========================================================================
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: mephi-minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: vaultaccess
+      MINIO_ROOT_PASSWORD: vaultsecret123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - mephi-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  # One-shot: create bucket for vault backups
+  minio-init:
+    image: minio/mc:latest
+    container_name: mephi-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        mc alias set mephi http://minio:9000 vaultaccess vaultsecret123
+        mc mb -p mephi/vault-backups || true
+    networks:
+      - mephi-network
+    restart: "no"
+
+  # ===========================================================================
   # ☁️ REMOTE SERVER (Spring Boot + PostgreSQL) - HOT RELOAD
   # ===========================================================================
   remote-server:
@@ -57,6 +99,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
       # Spring DataSource
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/vaultdb
@@ -71,12 +117,22 @@ services:
       JWT_SECRET: remote-server-secret-key-which-should-be-at-least-256-bits-long-for-security-purposes-12345
       # VirusTotal API (для модуля проверки файлов)
       VIRUSTOTAL_API_KEY: 0f4c6159c2be8b8ecf1ec4c72e2527166b4ac6b35046461b4c3e40802bfa280f
+      # S3 (MinIO) — backup scheduler
+      BACKUP_S3_ENABLED: "true"
+      BACKUP_S3_ENDPOINT: "http://minio:9000"
+      BACKUP_S3_ACCESS_KEY: vaultaccess
+      BACKUP_S3_SECRET_KEY: vaultsecret123
+      BACKUP_S3_BUCKET: vault-backups
+      # Cron: every day at 03:00 (Spring 6-field: sec min hour day month weekday)
+      BACKUP_S3_CRON: "0 0 3 * * *"
+      # Keep backups for 30 days, then remove older ones automatically
+      BACKUP_S3_RETENTION_DAYS: "30"
       # Logging
       LOGGING_LEVEL_ROOT: INFO
       LOGGING_LEVEL_BY_SAKHDANIL: DEBUG
     ports:
       - "8080:8080"
-      - "35729:35729"  # LiveReload порт
+      - "35728:35729"  # LiveReload: не 35729:35729, чтобы не конфликтовать с локальным mvn (DevTools) на хосте
     volumes:
       # Монтирование исходного кода для hot reload
       - ./ManagmentServer/src:/app/src:cached
@@ -136,11 +192,36 @@ services:
       retries: 3
       start_period: 120s
 
+  # ===========================================================================
+  # 🎨 FRONTEND (React dev server) — в браузере: http://localhost:3000
+  # Для Electron на хосте: сначала docker up, потом: cd frontend && npx wait-on http://localhost:3001 && npm run electron
+  # ===========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: mephi-frontend
+    depends_on:
+      local-server:
+        condition: service_healthy
+    environment:
+      BROWSER: none
+      WDS_SOCKET_PORT: 0
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src:cached
+      - ./frontend/public:/app/public:cached
+    networks:
+      - mephi-network
+
 # =============================================================================
 # 📦 VOLUMES
 # =============================================================================
 volumes:
   postgres_data:
+    driver: local
+  minio_data:
     driver: local
   local_server_data:
     driver: local

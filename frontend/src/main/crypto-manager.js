@@ -131,6 +131,68 @@ class CryptoManager {
       });
     });
   }
+
+  /**
+   * Шифрует JSON-строку бэкапа паролем (PBKDF2 200k + AES-256-CBC).
+   * Формат буфера:
+   *   VAULTBKP\x01  — 9 байт magic (8 ASCII + версия 0x01)
+   *   saltLen (1)   — всегда 16
+   *   salt    (16)
+   *   ivLen   (1)   — всегда 16
+   *   iv      (16)
+   *   ciphertext    — остальное
+   */
+  async encryptBackup(password, jsonString) {
+    const salt = crypto.randomBytes(16);
+    const iv   = crypto.randomBytes(16);
+    const key  = await this._deriveBackupKey(password, salt);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const data = Buffer.from(jsonString, 'utf8');
+    const enc  = Buffer.concat([cipher.update(data), cipher.final()]);
+    const magic = Buffer.from('VAULTBKP\x01');
+    return Buffer.concat([
+      magic,
+      Buffer.from([16]), salt,
+      Buffer.from([16]), iv,
+      enc
+    ]);
+  }
+
+  /**
+   * Дешифрует буфер созданный encryptBackup.
+   * @returns {string} JSON-строка
+   */
+  async decryptBackup(password, buffer) {
+    if (!Buffer.isBuffer(buffer)) {
+      buffer = Buffer.from(buffer);
+    }
+    const MAGIC = 'VAULTBKP\x01';
+    const magicBuf = buffer.slice(0, 9);
+    if (magicBuf.toString('binary') !== MAGIC) {
+      throw new Error('Invalid backup file: wrong magic header');
+    }
+    let off = 9;
+    const saltLen = buffer[off++];
+    const salt = buffer.slice(off, off + saltLen);
+    off += saltLen;
+    const ivLen = buffer[off++];
+    const iv = buffer.slice(off, off + ivLen);
+    off += ivLen;
+    const ciphertext = buffer.slice(off);
+    const key = await this._deriveBackupKey(password, salt);
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return plain.toString('utf8');
+  }
+
+  _deriveBackupKey(password, salt) {
+    return new Promise((resolve, reject) => {
+      crypto.pbkdf2(password, salt, 200000, 32, 'sha256', (err, key) => {
+        if (err) reject(err);
+        else resolve(key);
+      });
+    });
+  }
 }
 
 module.exports = CryptoManager; 

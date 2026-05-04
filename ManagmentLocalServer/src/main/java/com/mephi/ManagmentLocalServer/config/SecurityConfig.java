@@ -37,6 +37,9 @@ public class SecurityConfig {
                                 "/api/remote/**",
                                 "/remote-proxy/health-check",  // Только health-check публичный
                                 "/remote-proxy/auth/**",       // Auth эндпоинты для синхронизации
+                                "/security/check",
+                                "/security/policy",
+                                "/local-backup/import",        // Публичный: восстановление из файла как /auth/setup
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/api-docs/**",

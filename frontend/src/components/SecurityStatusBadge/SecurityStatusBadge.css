@@ -1,0 +1,58 @@
+@keyframes securityBadgeSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.security-badge .animate-spin {
+  animation: securityBadgeSpin 1s linear infinite;
+}
+
+.security-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.security-badge--checking {
+  background: rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.security-badge--allowed {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.security-badge--warning {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde047;
+  border-color: rgba(234, 179, 8, 0.45);
+}
+
+.security-badge--denied {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.security-badge--unknown {
+  background: rgba(100, 116, 139, 0.2);
+  color: #cbd5e1;
+  border-color: rgba(100, 116, 139, 0.35);
+}
+
+.security-badge__title {
+  cursor: help;
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

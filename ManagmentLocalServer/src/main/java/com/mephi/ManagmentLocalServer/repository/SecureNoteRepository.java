@@ -33,4 +33,6 @@ public interface SecureNoteRepository extends JpaRepository<SecureNote, Long> {
     
     @Query("SELECT n FROM SecureNote n WHERE n.user = :user AND n.updatedAt > :since")
     List<SecureNote> findByUserAndUpdatedAtAfter(@Param("user") User user, @Param("since") Instant since);
+
+    void deleteByUser(User user);
 } 

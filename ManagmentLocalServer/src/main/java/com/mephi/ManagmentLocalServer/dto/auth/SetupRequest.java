@@ -20,4 +20,7 @@ public class SetupRequest {
     
     @NotBlank(message = "Password hash is required")
     private String passwordHash;
+
+    /** UUID проверки из POST /security/check (при security.device.enforce=true) */
+    private String securityCheckId;
 } 
