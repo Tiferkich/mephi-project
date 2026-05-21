@@ -122,41 +122,43 @@ class CryptoManager {
   }
 
   /**
-   * Шифрует JSON-строку бэкапа паролем (PBKDF2 200k + AES-256-CBC).
-   * Бинарный формат намеренно оставлен CBC — смена сломает существующие .vault файлы.
+   * Шифрует JSON-строку бэкапа паролем (PBKDF2 200k + AES-256-GCM).
    * Формат буфера:
-   *   VAULTBKP\x01  — 9 байт magic
+   *   VAULTBKP\x02  — 9 байт magic (версия 0x02 = GCM)
    *   saltLen (1)   — всегда 16
    *   salt    (16)
-   *   ivLen   (1)   — всегда 16
-   *   iv      (16)
-   *   ciphertext    — остальное
+   *   nonceLen (1)  — всегда 12
+   *   nonce   (12)
+   *   ciphertext + authTag (16 байт в конце, добавляет GCM)
    */
   async encryptBackup(password, jsonString) {
-    const salt = crypto.randomBytes(16);
-    const iv   = crypto.randomBytes(16);
-    const key  = await this._deriveBackupKey(password, salt);
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-    const data = Buffer.from(jsonString, 'utf8');
-    const enc  = Buffer.concat([cipher.update(data), cipher.final()]);
-    const magic = Buffer.from('VAULTBKP\x01');
-    return Buffer.concat([magic, Buffer.from([16]), salt, Buffer.from([16]), iv, enc]);
+    const salt  = crypto.randomBytes(16);
+    const nonce = crypto.randomBytes(12); // 96-bit nonce для GCM
+    const key   = await this._deriveBackupKey(password, salt);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
+    const data  = Buffer.from(jsonString, 'utf8');
+    const enc   = Buffer.concat([cipher.update(data), cipher.final(), cipher.getAuthTag()]);
+    const magic = Buffer.from('VAULTBKP\x02');
+    return Buffer.concat([magic, Buffer.from([16]), salt, Buffer.from([12]), nonce, enc]);
   }
 
   async decryptBackup(password, buffer) {
     if (!Buffer.isBuffer(buffer)) buffer = Buffer.from(buffer);
-    const MAGIC = 'VAULTBKP\x01';
+    const MAGIC = 'VAULTBKP\x02';
     if (buffer.slice(0, 9).toString('binary') !== MAGIC) {
       throw new Error('Invalid backup file: wrong magic header');
     }
     let off = 9;
-    const saltLen = buffer[off++];
-    const salt = buffer.slice(off, off + saltLen); off += saltLen;
-    const ivLen = buffer[off++];
-    const iv = buffer.slice(off, off + ivLen); off += ivLen;
-    const ciphertext = buffer.slice(off);
+    const saltLen  = buffer[off++];
+    const salt  = buffer.slice(off, off + saltLen);  off += saltLen;
+    const nonceLen = buffer[off++];
+    const nonce = buffer.slice(off, off + nonceLen); off += nonceLen;
+    const ciphertextWithTag = buffer.slice(off);
+    const authTag    = ciphertextWithTag.slice(-16);
+    const ciphertext = ciphertextWithTag.slice(0, -16);
     const key = await this._deriveBackupKey(password, salt);
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
+    decipher.setAuthTag(authTag);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
   }
 
