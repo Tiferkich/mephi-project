@@ -331,168 +331,13 @@ class GostKuznechik {
     }
 }
 
-// Глобальный экземпляр
-const kuznechik = new GostKuznechik();
-
 /**
- * Шифрование данных с использованием ГОСТ "Кузнечик"
- * @param {ArrayBuffer|Uint8Array|string} data - Данные для шифрования
- * @param {string} password - Мастер-пароль
- * @returns {Promise<{encrypted: string, iv: string, salt: string, algorithm: string}>}
+ * Шифрование файлов — AES-256-GCM через Web Crypto API.
+ * Предыдущая реализация ГОСТ "Кузнечик" (CBC) оставлена ниже как справочная.
  */
-export async function encryptGOST(data, password) {
-    try {
-        // Конвертируем данные в Uint8Array
-        let dataArray;
-        if (typeof data === 'string') {
-            dataArray = new TextEncoder().encode(data);
-        } else if (data instanceof ArrayBuffer) {
-            dataArray = new Uint8Array(data);
-        } else {
-            dataArray = data;
-        }
-        
-        // Генерируем соль и IV
-        const salt = kuznechik.generateSalt();
-        const iv = kuznechik.generateIV();
-        
-        // Генерируем ключ из пароля
-        const key = await kuznechik.deriveKey(password, salt);
-        
-        // Разворачиваем ключ для раундовых ключей
-        kuznechik.expandKey(key);
-        
-        // Шифруем
-        const encrypted = kuznechik.encryptCBC(dataArray, iv);
-        
-        return {
-            encrypted: arrayToBase64(encrypted),
-            iv: arrayToBase64(iv),
-            salt: arrayToBase64(salt),
-            algorithm: 'GOST-Kuznechik-CBC'
-        };
-    } catch (error) {
-        console.error('GOST encryption error:', error);
-        throw new Error('Encryption failed: ' + error.message);
-    }
-}
 
-/**
- * Дешифрование данных с использованием ГОСТ "Кузнечик"
- * @param {string} encryptedBase64 - Зашифрованные данные в Base64
- * @param {string} ivBase64 - IV в Base64
- * @param {string} saltBase64 - Соль в Base64
- * @param {string} password - Мастер-пароль
- * @param {boolean} asString - Вернуть как строку (по умолчанию true)
- * @returns {Promise<string|Uint8Array>}
- */
-export async function decryptGOST(encryptedBase64, ivBase64, saltBase64, password, asString = true) {
-    try {
-        const encrypted = base64ToArray(encryptedBase64);
-        const iv = base64ToArray(ivBase64);
-        const salt = base64ToArray(saltBase64);
-        
-        // Генерируем ключ из пароля
-        const key = await kuznechik.deriveKey(password, salt);
-        
-        // Разворачиваем ключ
-        kuznechik.expandKey(key);
-        
-        // Дешифруем
-        const decrypted = kuznechik.decryptCBC(encrypted, iv);
-        
-        if (asString) {
-            return new TextDecoder().decode(decrypted);
-        }
-        return decrypted;
-    } catch (error) {
-        console.error('GOST decryption error:', error);
-        throw new Error('Decryption failed: ' + error.message);
-    }
-}
+// ─── Вспомогательные функции ──────────────────────────────────────────────────
 
-/**
- * Шифрование строки (удобная обертка)
- */
-export async function encryptString(text, password) {
-    const result = await encryptGOST(text, password);
-    return JSON.stringify(result);
-}
-
-/**
- * Дешифрование строки (удобная обертка)
- */
-export async function decryptString(encryptedJson, password) {
-    const { encrypted, iv, salt } = JSON.parse(encryptedJson);
-    return await decryptGOST(encrypted, iv, salt, password, true);
-}
-
-/**
- * Шифрование файла
- * @param {File|Blob} file - Файл для шифрования
- * @param {string} password - Мастер-пароль
- * @returns {Promise<{encryptedData: Uint8Array, metadata: object}>}
- */
-export async function encryptFile(file, password) {
-    const arrayBuffer = await file.arrayBuffer();
-    const data = new Uint8Array(arrayBuffer);
-    
-    // Шифруем данные файла
-    const result = await encryptGOST(data, password);
-    
-    // Шифруем метаданные
-    const encryptedName = await encryptString(file.name, password);
-    const encryptedMimeType = await encryptString(file.type || 'application/octet-stream', password);
-    
-    // Вычисляем SHA-256 хеш оригинального файла
-    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-    const checksum = Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-    
-    return {
-        encryptedData: base64ToArray(result.encrypted),
-        metadata: {
-            encryptedName,
-            encryptedMimeType,
-            checksum,
-            originalSize: file.size,
-            iv: result.iv,
-            salt: result.salt,
-            algorithm: result.algorithm
-        }
-    };
-}
-
-/**
- * Дешифрование файла
- * @param {Uint8Array} encryptedData - Зашифрованные данные
- * @param {object} metadata - Метаданные (iv, salt, encryptedName, encryptedMimeType)
- * @param {string} password - Мастер-пароль
- * @returns {Promise<{data: Uint8Array, name: string, mimeType: string}>}
- */
-export async function decryptFile(encryptedData, metadata, password) {
-    // Дешифруем данные
-    const decrypted = await decryptGOST(
-        arrayToBase64(encryptedData),
-        metadata.iv,
-        metadata.salt,
-        password,
-        false
-    );
-    
-    // Дешифруем метаданные
-    const name = await decryptString(metadata.encryptedName, password);
-    const mimeType = await decryptString(metadata.encryptedMimeType, password);
-    
-    return {
-        data: decrypted,
-        name,
-        mimeType
-    };
-}
-
-// Вспомогательные функции
 function arrayToBase64(array) {
     return btoa(String.fromCharCode.apply(null, array));
 }
@@ -506,14 +351,150 @@ function base64ToArray(base64) {
     return array;
 }
 
-export default {
-    encryptGOST,
-    decryptGOST,
-    encryptString,
-    decryptString,
-    encryptFile,
-    decryptFile
-};
+/**
+ * Выводит AES-256-GCM ключ из пароля и соли (PBKDF2-SHA256, 100k итераций).
+ */
+async function deriveAesKey(password, salt) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
+    );
+    return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+}
+
+// ─── Публичный API ────────────────────────────────────────────────────────────
+
+/**
+ * Шифрует произвольные данные (строку, ArrayBuffer, Uint8Array).
+ * Возвращает { encrypted, iv, salt, algorithm }.
+ * Web Crypto AES-GCM автоматически добавляет 16-байтный auth tag в конец.
+ */
+export async function encryptGOST(data, password) {
+    let dataArray;
+    if (typeof data === 'string') {
+        dataArray = new TextEncoder().encode(data);
+    } else if (data instanceof ArrayBuffer) {
+        dataArray = new Uint8Array(data);
+    } else {
+        dataArray = data;
+    }
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv   = crypto.getRandomValues(new Uint8Array(12)); // 96-bit nonce для GCM
+    const key  = await deriveAesKey(password, salt);
+
+    const ciphertext = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv, tagLength: 128 },
+        key,
+        dataArray
+    );
+
+    return {
+        encrypted: arrayToBase64(new Uint8Array(ciphertext)),
+        iv:        arrayToBase64(iv),
+        salt:      arrayToBase64(salt),
+        algorithm: 'AES-256-GCM',
+    };
+}
+
+/**
+ * Дешифрует данные, зашифрованные через encryptGOST.
+ */
+export async function decryptGOST(encryptedBase64, ivBase64, saltBase64, password, asString = true) {
+    const ciphertext = base64ToArray(encryptedBase64);
+    const iv         = base64ToArray(ivBase64);
+    const salt       = base64ToArray(saltBase64);
+    const key        = await deriveAesKey(password, salt);
+
+    const plaintext = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv, tagLength: 128 },
+        key,
+        ciphertext
+    );
+
+    if (asString) {
+        return new TextDecoder().decode(plaintext);
+    }
+    return new Uint8Array(plaintext);
+}
+
+/**
+ * Шифрует строку, возвращает JSON-строку с полями encrypted/iv/salt/algorithm.
+ */
+export async function encryptString(text, password) {
+    const result = await encryptGOST(text, password);
+    return JSON.stringify(result);
+}
+
+/**
+ * Дешифрует строку из JSON-формата encryptString.
+ */
+export async function decryptString(encryptedJson, password) {
+    const { encrypted, iv, salt } = JSON.parse(encryptedJson);
+    return decryptGOST(encrypted, iv, salt, password, true);
+}
+
+/**
+ * Шифрует файл (AES-256-GCM). Возвращает зашифрованные байты и метаданные.
+ */
+export async function encryptFile(file, password) {
+    const arrayBuffer = await file.arrayBuffer();
+    const data = new Uint8Array(arrayBuffer);
+
+    const result = await encryptGOST(data, password);
+
+    const encryptedName     = await encryptString(file.name, password);
+    const encryptedMimeType = await encryptString(file.type || 'application/octet-stream', password);
+
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const checksum = Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+    return {
+        encryptedData: base64ToArray(result.encrypted),
+        metadata: {
+            encryptedName,
+            encryptedMimeType,
+            checksum,
+            originalSize: file.size,
+            iv:        result.iv,
+            salt:      result.salt,
+            algorithm: result.algorithm,
+        },
+    };
+}
+
+/**
+ * Дешифрует файл, зашифрованный через encryptFile.
+ */
+export async function decryptFile(encryptedData, metadata, password) {
+    const decrypted = await decryptGOST(
+        arrayToBase64(encryptedData),
+        metadata.iv,
+        metadata.salt,
+        password,
+        false
+    );
+
+    const name     = await decryptString(metadata.encryptedName,     password);
+    const mimeType = await decryptString(metadata.encryptedMimeType, password);
+
+    return { data: decrypted, name, mimeType };
+}
+
+export default { encryptGOST, decryptGOST, encryptString, decryptString, encryptFile, decryptFile };
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Справочная реализация ГОСТ 34.12-2018 "Кузнечик" (не используется)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 
 
